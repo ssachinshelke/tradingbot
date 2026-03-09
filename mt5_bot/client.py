@@ -370,24 +370,42 @@ class MT5Client:
         symbol = str(request["symbol"])
         attempted: list[str] = []
         last_none_error: tuple | None = None
+        request_variants: list[tuple[str, dict[str, Any]]] = [("with_comment", dict(request))]
+        if "comment" in request:
+            no_comment = dict(request)
+            no_comment.pop("comment", None)
+            request_variants.append(("no_comment", no_comment))
 
-        for mode in self._market_filling_modes(symbol):
-            attempted.append(self._filling_mode_name(mode))
-            payload = dict(request)
-            payload["type_filling"] = mode
-            result = mt5.order_check(payload) if check_only else mt5.order_send(payload)
-            if result is None:
-                last_none_error = mt5.last_error()
-                continue
-            data = result._asdict()
-            retcode = int(data.get("retcode", -1) or -1)
-            if retcode in success_retcodes:
-                return data
-            if retcode != invalid_fill_retcode:
-                raise RuntimeError(
-                    f"{context} failed retcode={retcode}, "
-                    f"comment={data.get('comment')}"
+        for variant_name, base_request in request_variants:
+            for mode in self._market_filling_modes(symbol):
+                attempted.append(f"{self._filling_mode_name(mode)}:{variant_name}")
+                payload = dict(base_request)
+                payload["type_filling"] = mode
+                result = (
+                    mt5.order_check(payload)
+                    if check_only
+                    else mt5.order_send(payload)
                 )
+                if result is None:
+                    last_none_error = mt5.last_error()
+                    if (
+                        variant_name == "with_comment"
+                        and "comment" in str(last_none_error).lower()
+                    ):
+                        break
+                    continue
+                data = result._asdict()
+                retcode = int(data.get("retcode", -1) or -1)
+                if retcode in success_retcodes:
+                    return data
+                if retcode != invalid_fill_retcode:
+                    comment_text = str(data.get("comment", "")).lower()
+                    if variant_name == "with_comment" and "comment" in comment_text:
+                        break
+                    raise RuntimeError(
+                        f"{context} failed retcode={retcode}, "
+                        f"comment={data.get('comment')}"
+                    )
 
         if last_none_error is not None:
             raise RuntimeError(
