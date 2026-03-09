@@ -160,7 +160,10 @@ def _place_step(bot: TradingBot, symbol: str, step: StepPlan, comment_prefix: st
     safe_comment = MT5Client._safe_comment(f"{comment_prefix}:{step.comment}:{int(time.time())}")
     sl = float(step.sl_price) if step.sl_price is not None else 0.0
     tp = float(step.tp_price) if step.tp_price is not None else 0.0
-    baseline_tickets = {int(getattr(p, "ticket")) for p in bot.client.positions(symbol=symbol)}
+    baseline_snapshot = {
+        int(getattr(p, "ticket")): float(getattr(p, "volume", 0.0) or 0.0)
+        for p in bot.client.positions(symbol=symbol)
+    }
     if step.trigger_price is None:
         result = bot.client.send_market_order(
             symbol=symbol,
@@ -175,6 +178,7 @@ def _place_step(bot: TradingBot, symbol: str, step: StepPlan, comment_prefix: st
             "result": result,
             "comment": safe_comment,
             "order_ticket": int(result.get("order", 0) or 0),
+            "baseline_snapshot": baseline_snapshot,
             "sl": step.sl_price,
             "tp": step.tp_price,
         }
@@ -273,10 +277,24 @@ def _place_step(bot: TradingBot, symbol: str, step: StepPlan, comment_prefix: st
         "result": result,
         "comment": used_comment,
         "order_ticket": int(result.get("order", 0) or 0),
-        "baseline_tickets": sorted(baseline_tickets),
+        "baseline_snapshot": baseline_snapshot,
         "sl": step.sl_price,
         "tp": step.tp_price,
     }
+
+
+def _find_new_or_changed_position(
+    bot: TradingBot, symbol: str, baseline_snapshot: dict[int, float],
+) -> Any | None:
+    positions = bot.client.positions(symbol=symbol)
+    for pos in positions:
+        ticket = int(getattr(pos, "ticket"))
+        volume = float(getattr(pos, "volume", 0.0) or 0.0)
+        if ticket not in baseline_snapshot:
+            return pos
+        if abs(volume - baseline_snapshot[ticket]) > 1e-9:
+            return pos
+    return None
 
 
 def _wait_for_position_open(
@@ -285,7 +303,7 @@ def _wait_for_position_open(
     safe_comment: str,
     timeout_seconds: int,
     poll_seconds: float,
-    baseline_tickets: set[int] | None = None,
+    baseline_snapshot: dict[int, float] | None = None,
 ) -> Any:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() <= deadline:
@@ -293,12 +311,10 @@ def _wait_for_position_open(
             pos = _find_position_by_comment(bot, symbol, safe_comment)
             if pos is not None:
                 return pos
-        if baseline_tickets is not None:
-            positions = bot.client.positions(symbol=symbol)
-            for pos in positions:
-                ticket = int(getattr(pos, "ticket"))
-                if ticket not in baseline_tickets:
-                    return pos
+        if baseline_snapshot is not None:
+            pos = _find_new_or_changed_position(bot, symbol, baseline_snapshot)
+            if pos is not None:
+                return pos
         time.sleep(max(0.2, poll_seconds))
     raise RuntimeError(f"Timed out waiting for position open (comment={safe_comment})")
 
@@ -310,7 +326,7 @@ def _wait_for_pending_fill(
     safe_comment: str,
     timeout_seconds: int,
     poll_seconds: float,
-    baseline_tickets: set[int] | None = None,
+    baseline_snapshot: dict[int, float] | None = None,
 ) -> Any:
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() <= deadline:
@@ -321,12 +337,10 @@ def _wait_for_pending_fill(
             pos = _find_position_by_comment(bot, symbol, safe_comment)
             if pos is not None:
                 return pos
-        if baseline_tickets is not None:
-            positions = bot.client.positions(symbol=symbol)
-            for pos in positions:
-                ticket = int(getattr(pos, "ticket"))
-                if ticket not in baseline_tickets:
-                    return pos
+        if baseline_snapshot is not None:
+            pos = _find_new_or_changed_position(bot, symbol, baseline_snapshot)
+            if pos is not None:
+                return pos
         time.sleep(max(0.2, poll_seconds))
     raise RuntimeError(f"Timed out waiting for pending fill (order={order_ticket})")
 
@@ -438,9 +452,12 @@ def _execute_workflow(
                 safe_comment=entry_data["comment"],
                 timeout_seconds=timeout_seconds,
                 poll_seconds=poll_seconds,
-                baseline_tickets=(
-                    set(entry_data["baseline_tickets"])
-                    if "baseline_tickets" in entry_data
+                baseline_snapshot=(
+                    {
+                        int(k): float(v)
+                        for k, v in dict(entry_data["baseline_snapshot"]).items()
+                    }
+                    if "baseline_snapshot" in entry_data
                     else None
                 ),
             )
@@ -451,9 +468,12 @@ def _execute_workflow(
                 safe_comment=entry_data["comment"],
                 timeout_seconds=min(timeout_seconds, 30),
                 poll_seconds=poll_seconds,
-                baseline_tickets=(
-                    set(entry_data["baseline_tickets"])
-                    if "baseline_tickets" in entry_data
+                baseline_snapshot=(
+                    {
+                        int(k): float(v)
+                        for k, v in dict(entry_data["baseline_snapshot"]).items()
+                    }
+                    if "baseline_snapshot" in entry_data
                     else None
                 ),
             )
