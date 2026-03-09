@@ -1,0 +1,18 @@
+[
+  {
+    "name": "account-1",
+    "mt5_login": 11111111,
+    "mt5_password": "password1",
+    "mt5_server": "MetaQuotes-Demo",
+    "mt5_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+    "mt5_portable": false
+  },
+  {
+    "name": "account-2",
+    "mt5_login": 22222222,
+    "mt5_password": "password2",
+    "mt5_server": "MetaQuotes-Demo",
+    "mt5_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+    "mt5_portable": false
+  }
+]

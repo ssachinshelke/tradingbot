@@ -1,0 +1,12 @@
+.env
+accounts.json
+order_plan.json
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.venv311/
+venv/
+mt5-portable/
+*.csv

@@ -1,0 +1,22 @@
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "side": "buy",
+    "volume": 0.1,
+    "sl_pips": 20,
+    "tp_pips": 40,
+    "comment": "customer-order-1",
+    "force_fail": false
+  },
+  {
+    "account": "account-2",
+    "symbol": "XAUUSD",
+    "side": "sell",
+    "volume": 0.05,
+    "sl_pips": 150,
+    "tp_pips": 300,
+    "comment": "customer-order-2",
+    "force_fail": false
+  }
+]

@@ -1,0 +1,31 @@
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "entry": {
+      "side": "buy",
+      "volume": 0.1,
+      "trigger_price": 1.1000,
+      "sl_price": 1.0800,
+      "tp_price": 1.1800,
+      "comment": "entry-at-1.1000"
+    },
+    "on_fill": {
+      "side": "buy",
+      "volume": 0.1,
+      "trigger_price": 1.2000,
+      "sl_price": 1.1800,
+      "tp_price": 1.2600,
+      "comment": "second-order-at-1.2000"
+    },
+    "on_sl": {
+      "side": "buy",
+      "volume": 0.1,
+      "trigger_price": 1.0500,
+      "sl_price": 1.0300,
+      "tp_price": 1.1000,
+      "comment": "re-entry-after-sl"
+    },
+    "timeout_seconds": 43200
+  }
+]
