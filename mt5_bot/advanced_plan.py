@@ -444,6 +444,19 @@ def _execute_workflow(
         entry_data = _place_step(bot, wf.symbol, wf.entry, f"{wf.account}:entry")
         steps.append({"event": "entry_placed", "data": entry_data})
 
+        # For a standalone entry workflow, place-and-exit immediately.
+        # This avoids long waits when user only wants order submission.
+        if wf.on_fill is None and wf.on_sl is None:
+            return {
+                "ok": True,
+                "name": account.name,
+                "login": account.mt5_login,
+                "symbol": wf.symbol,
+                "started_at_utc": started_at,
+                "finished_at_utc": _now_utc_iso(),
+                "steps": steps,
+            }
+
         if entry_data["kind"] == "pending":
             entry_pos = _wait_for_pending_fill(
                 bot=bot,
