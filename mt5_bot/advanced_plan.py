@@ -26,8 +26,9 @@ def _now_utc_iso() -> str:
 
 @dataclass(frozen=True)
 class StepPlan:
-    side: str
-    volume: float
+    action: str
+    side: str | None
+    volume: float | None
     trigger_price: float | None
     sl_price: float | None
     tp_price: float | None
@@ -54,12 +55,23 @@ def _as_float(value: Any, field: str) -> float:
 def _parse_step(raw: dict[str, Any], field_name: str) -> StepPlan:
     if not isinstance(raw, dict):
         raise ValueError(f"'{field_name}' must be an object")
-    side = str(raw.get("side", "")).strip().lower()
-    if side not in ("buy", "sell"):
+    action = str(raw.get("action", "open")).strip().lower()
+    if action not in ("open", "close"):
+        raise ValueError(f"'{field_name}.action' must be open/close")
+    side_raw = raw.get("side")
+    side = str(side_raw).strip().lower() if side_raw is not None else None
+    if side is not None and side not in ("buy", "sell"):
         raise ValueError(f"'{field_name}.side' must be buy/sell")
-    if "volume" not in raw:
-        raise ValueError(f"'{field_name}.volume' is required")
-    volume = _as_float(raw["volume"], f"{field_name}.volume")
+    volume = (
+        _as_float(raw["volume"], f"{field_name}.volume")
+        if "volume" in raw and raw.get("volume") is not None
+        else None
+    )
+    if action == "open":
+        if side is None:
+            raise ValueError(f"'{field_name}.side' is required")
+        if volume is None:
+            raise ValueError(f"'{field_name}.volume' is required")
     trigger_price = (
         _as_float(raw["trigger_price"], f"{field_name}.trigger_price")
         if raw.get("trigger_price") is not None
@@ -77,6 +89,7 @@ def _parse_step(raw: dict[str, Any], field_name: str) -> StepPlan:
     )
     comment = str(raw.get("comment", field_name)).strip() or field_name
     return StepPlan(
+        action=action,
         side=side,
         volume=volume,
         trigger_price=trigger_price,
@@ -118,6 +131,10 @@ def load_advanced_order_plan(path: str) -> list[WorkflowPlan]:
             if item.get("on_sl") is not None
             else None
         )
+        if entry.action == "close" and (on_fill is not None or on_sl is not None):
+            raise ValueError(
+                f"Workflow row #{idx}: close action cannot use on_fill/on_sl"
+            )
         timeout_seconds = int(item.get("timeout_seconds", 3600))
         if timeout_seconds <= 0:
             raise ValueError(f"Workflow row #{idx} timeout_seconds must be > 0")
@@ -158,6 +175,38 @@ def _infer_pending_order_type(bot: TradingBot, symbol: str, side: str, trigger_p
 
 def _place_step(bot: TradingBot, symbol: str, step: StepPlan, comment_prefix: str) -> dict[str, Any]:
     safe_comment = MT5Client._safe_comment(f"{comment_prefix}:{step.comment}:{int(time.time())}")
+    if step.action == "close":
+        positions = bot.client.positions(symbol=symbol)
+        if step.side == "buy":
+            positions = [p for p in positions if int(getattr(p, "type", -1)) == int(mt5.POSITION_TYPE_BUY)]
+        elif step.side == "sell":
+            positions = [p for p in positions if int(getattr(p, "type", -1)) == int(mt5.POSITION_TYPE_SELL)]
+        if not positions:
+            raise RuntimeError(
+                f"No matching open positions to close for {symbol} "
+                f"(side={step.side or 'all'})"
+            )
+        closed: list[dict[str, Any]] = []
+        for pos in positions:
+            req_volume = float(step.volume) if step.volume is not None else None
+            if req_volume is not None and req_volume > float(getattr(pos, "volume", 0.0)):
+                req_volume = float(getattr(pos, "volume", 0.0))
+            res = bot.client.close_position(pos, volume=req_volume, comment=safe_comment)
+            closed.append(
+                {
+                    "ticket": int(getattr(pos, "ticket")),
+                    "symbol": str(getattr(pos, "symbol", symbol)),
+                    "retcode": res.get("retcode"),
+                    "deal": res.get("deal"),
+                    "order": res.get("order"),
+                }
+            )
+        return {
+            "kind": "close",
+            "comment": safe_comment,
+            "closed": closed,
+            "closed_count": len(closed),
+        }
     sl = float(step.sl_price) if step.sl_price is not None else 0.0
     tp = float(step.tp_price) if step.tp_price is not None else 0.0
     baseline_snapshot = {
