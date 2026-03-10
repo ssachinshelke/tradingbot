@@ -3,8 +3,10 @@
 from pathlib import Path
 
 # In PyInstaller spec execution, __file__ may be unset on some CI runners.
-# The build scripts cd to repo root before invoking this spec.
+# Use cwd from build scripts and absolute script path so PyInstaller does not
+# try to resolve run_ui.py under packaging/.
 project_root = Path.cwd().resolve()
+entry_script = str(project_root / "run_ui.py")
 web_dir = project_root / "ui_backend" / "web"
 
 datas = [
@@ -25,7 +27,7 @@ hiddenimports = [
 
 
 a = Analysis(
-    ["run_ui.py"],
+    [entry_script],
     pathex=[str(project_root)],
     binaries=[],
     datas=datas,
