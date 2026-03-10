@@ -36,6 +36,13 @@ def _parse_iso(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off", "")
+
+
 @dataclass(frozen=True)
 class LicenseStatus:
     status: str
@@ -46,6 +53,9 @@ class LicenseStatus:
 
 
 class LicenseManager:
+    _REG_PATH = r"Software\Tradingm5UI\License"
+    _REG_VALUE = "TrialAnchor"
+
     def __init__(
         self,
         product_name: str = "Tradingm5UI",
@@ -55,11 +65,15 @@ class LicenseManager:
         self.product_name = product_name
         self.trial_days = trial_days
         self._trusted_time_provider = trusted_time_provider
+        self.strict_trusted_time = _env_bool("LICENSE_STRICT_TRUSTED_TIME", True)
+
         self.machine_id = self._machine_fingerprint()
         self.state_dir = self._resolve_state_dir()
         self.state_dir.mkdir(parents=True, exist_ok=True)
+
         self.trial_state_path = self.state_dir / "trial_state.json"
         self.license_store_path = self.state_dir / "license.json"
+        self.hidden_anchor_path = self.state_dir / ".trial_anchor.dat"
         self._secret = hashlib.sha256(f"{self.product_name}:{self.machine_id}".encode("utf-8")).digest()
 
     def _resolve_state_dir(self) -> Path:
@@ -97,7 +111,6 @@ class LicenseManager:
 
     @staticmethod
     def _hardware_uuid() -> str | None:
-        # Best-effort hardware UUID (survives app reinstall and usually OS reinstall).
         try:
             out = subprocess.check_output(
                 ["wmic", "csproduct", "get", "uuid"],
@@ -133,49 +146,179 @@ class LicenseManager:
             pass
         return None
 
-    def _sign_state(self, payload: dict[str, Any]) -> str:
+    @staticmethod
+    def _set_hidden(path: Path) -> None:
+        try:
+            ctypes.windll.kernel32.SetFileAttributesW(str(path), 0x02)  # FILE_ATTRIBUTE_HIDDEN
+        except Exception:
+            pass
+
+    def _sign_json(self, payload: dict[str, Any], purpose: str) -> str:
         msg = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        sig = hmac.new(self._secret, msg, hashlib.sha256).hexdigest()
-        return sig
+        key = hashlib.sha256(self._secret + purpose.encode("utf-8")).digest()
+        return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+    def _sign_state(self, payload: dict[str, Any]) -> str:
+        return self._sign_json(payload, "state")
+
+    def _sign_anchor(self, payload: dict[str, Any]) -> str:
+        return self._sign_json(payload, "anchor")
+
+    def _usage_chain_step(self, prev_chain: str, usage_counter: int, seen_utc: str, trusted_utc: str | None) -> str:
+        payload = {
+            "prev_chain": prev_chain,
+            "usage_counter": usage_counter,
+            "seen_utc": seen_utc,
+            "trusted_utc": trusted_utc,
+        }
+        return self._sign_json(payload, "usage_chain")
+
+    def _anchor_payload_from_state(self, state: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "anchor_id": state.get("anchor_id"),
+            "machine_id": state.get("machine_id"),
+            "first_run_utc": state.get("first_run_utc"),
+        }
+
+    def _write_registry_anchor(self, anchor_payload: dict[str, Any]) -> None:
+        if winreg is None:
+            return
+        data = dict(anchor_payload)
+        data["sig"] = self._sign_anchor(anchor_payload)
+        raw = json.dumps(data, sort_keys=True, separators=(",", ":"))
+        try:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, self._REG_PATH) as key:
+                winreg.SetValueEx(key, self._REG_VALUE, 0, winreg.REG_SZ, raw)
+        except Exception:
+            # In strict mode, inability to persist anchor is treated later as invalid.
+            pass
+
+    def _read_registry_anchor(self) -> dict[str, Any] | None:
+        if winreg is None:
+            return None
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._REG_PATH) as key:
+                raw, _ = winreg.QueryValueEx(key, self._REG_VALUE)
+            data = json.loads(str(raw))
+            if isinstance(data, dict):
+                return data
+            return None
+        except Exception:
+            return None
+
+    def _write_hidden_anchor(self, anchor_payload: dict[str, Any]) -> None:
+        digest = self._sign_json(anchor_payload, "hidden_anchor")
+        self.hidden_anchor_path.write_text(digest, encoding="utf-8")
+        self._set_hidden(self.hidden_anchor_path)
+
+    def _read_hidden_anchor(self) -> str | None:
+        try:
+            if not self.hidden_anchor_path.exists():
+                return None
+            return self.hidden_anchor_path.read_text(encoding="utf-8").strip() or None
+        except Exception:
+            return None
+
+    def _validate_anchor_integrity(self, state: dict[str, Any]) -> None:
+        anchor_payload = self._anchor_payload_from_state(state)
+        expected_anchor_sig = self._sign_anchor(anchor_payload)
+        expected_hidden = self._sign_json(anchor_payload, "hidden_anchor")
+
+        reg = self._read_registry_anchor()
+        if reg is None:
+            raise RuntimeError("Registry trial anchor missing")
+        reg_payload = {
+            "anchor_id": reg.get("anchor_id"),
+            "machine_id": reg.get("machine_id"),
+            "first_run_utc": reg.get("first_run_utc"),
+        }
+        reg_sig = str(reg.get("sig", ""))
+        if reg_payload != anchor_payload or reg_sig != expected_anchor_sig:
+            raise RuntimeError("Registry trial anchor mismatch")
+
+        hidden = self._read_hidden_anchor()
+        if hidden is None:
+            raise RuntimeError("Hidden trial anchor missing")
+        if hidden != expected_hidden:
+            raise RuntimeError("Hidden trial anchor mismatch")
+
+    def _persist_anchor_integrity(self, state: dict[str, Any]) -> None:
+        anchor_payload = self._anchor_payload_from_state(state)
+        self._write_registry_anchor(anchor_payload)
+        self._write_hidden_anchor(anchor_payload)
+
+    def _state_payload(self, state: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "first_run_utc": state.get("first_run_utc"),
+            "machine_id": state.get("machine_id"),
+            "last_seen_utc": state.get("last_seen_utc"),
+            "last_trusted_utc": state.get("last_trusted_utc"),
+            "usage_counter": int(state.get("usage_counter", 0) or 0),
+            "chain_head": state.get("chain_head"),
+            "anchor_id": state.get("anchor_id"),
+        }
+
+    def _save_trial_state(self, state: dict[str, Any]) -> None:
+        payload = self._state_payload(state)
+        data = dict(payload)
+        data["sig"] = self._sign_state(payload)
+        self.trial_state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def _ensure_trial_state(self) -> dict[str, Any]:
         if self.trial_state_path.exists():
             raw = json.loads(self.trial_state_path.read_text(encoding="utf-8"))
             sig = str(raw.get("sig", ""))
-            payload = {
-                "first_run_utc": raw.get("first_run_utc"),
-                "machine_id": raw.get("machine_id"),
-                "last_seen_utc": raw.get("last_seen_utc"),
-                "last_trusted_utc": raw.get("last_trusted_utc"),
-            }
+            payload = self._state_payload(raw)
             if sig == self._sign_state(payload):
-                # Backward-compatible migration from old state format.
                 if not raw.get("last_seen_utc"):
                     raw["last_seen_utc"] = raw.get("first_run_utc")
                 if "last_trusted_utc" not in raw:
                     raw["last_trusted_utc"] = None
+                if "usage_counter" not in raw:
+                    raw["usage_counter"] = 0
+                if not raw.get("chain_head"):
+                    raw["chain_head"] = self._sign_json(
+                        {
+                            "seed": f"{raw.get('machine_id')}|{raw.get('first_run_utc')}",
+                        },
+                        "usage_chain_seed",
+                    )
+                if not raw.get("anchor_id"):
+                    raw["anchor_id"] = self._sign_json(
+                        {
+                            "machine_id": raw.get("machine_id"),
+                            "first_run_utc": raw.get("first_run_utc"),
+                        },
+                        "anchor_id",
+                    )[:24]
+                self._validate_anchor_integrity(raw)
                 return raw
-        payload = {
-            "first_run_utc": _iso(_utc_now()),
-            "machine_id": self.machine_id,
-            "last_seen_utc": _iso(_utc_now()),
-            "last_trusted_utc": None,
-        }
-        data = dict(payload)
-        data["sig"] = self._sign_state(payload)
-        self.trial_state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        return data
 
-    def _save_trial_state(self, state: dict[str, Any]) -> None:
-        payload = {
-            "first_run_utc": state.get("first_run_utc"),
-            "machine_id": state.get("machine_id"),
-            "last_seen_utc": state.get("last_seen_utc"),
-            "last_trusted_utc": state.get("last_trusted_utc"),
+        now_iso = _iso(_utc_now())
+        anchor_id = self._sign_json(
+            {
+                "machine_id": self.machine_id,
+                "first_run_utc": now_iso,
+            },
+            "anchor_id",
+        )[:24]
+        chain_seed = self._sign_json(
+            {"seed": f"{self.machine_id}|{now_iso}"},
+            "usage_chain_seed",
+        )
+        state = {
+            "first_run_utc": now_iso,
+            "machine_id": self.machine_id,
+            "last_seen_utc": now_iso,
+            "last_trusted_utc": None,
+            "usage_counter": 0,
+            "chain_head": chain_seed,
+            "anchor_id": anchor_id,
         }
-        data = dict(payload)
-        data["sig"] = self._sign_state(payload)
-        self.trial_state_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self._save_trial_state(state)
+        self._persist_anchor_integrity(state)
+        self._validate_anchor_integrity(state)
+        return state
 
     def _trusted_now(self) -> datetime | None:
         if self._trusted_time_provider is None:
@@ -193,9 +336,10 @@ class LicenseManager:
     def _reference_now(self) -> tuple[datetime, datetime | None]:
         local_now = _utc_now()
         trusted_now = self._trusted_now()
+        if self.strict_trusted_time and trusted_now is None:
+            raise RuntimeError("Trusted market time unavailable (strict mode)")
         if trusted_now is None:
             return local_now, None
-        # Use the greater value to block system clock rollback extension.
         return max(local_now, trusted_now), trusted_now
 
     def _load_public_key(self) -> Ed25519PublicKey | None:
@@ -240,8 +384,11 @@ class LicenseManager:
                 error=f"License file not found: {path}",
             )
         try:
+            ref_now, _ = self._reference_now()
+            # Enforce trial state integrity before activation too.
+            self._ensure_trial_state()
+
             doc = json.loads(file_path.read_text(encoding="utf-8"))
-            ref_now, _trusted_now = self._reference_now()
             ok, err = self._verify_license_document(doc, reference_now=ref_now)
             if not ok:
                 return LicenseStatus(
@@ -264,9 +411,19 @@ class LicenseManager:
             )
 
     def status(self) -> LicenseStatus:
-        ref_now, trusted_now = self._reference_now()
+        try:
+            ref_now, trusted_now = self._reference_now()
+        except Exception as exc:
+            return LicenseStatus(
+                status="license_invalid",
+                machine_id=self.machine_id,
+                error=str(exc),
+            )
+
         if self.license_store_path.exists():
             try:
+                # Keep anchor checks active even for paid license.
+                self._ensure_trial_state()
                 doc = json.loads(self.license_store_path.read_text(encoding="utf-8"))
                 ok, err = self._verify_license_document(doc, reference_now=ref_now)
                 if ok:
@@ -287,14 +444,23 @@ class LicenseManager:
                     error=str(exc),
                 )
 
-        trial = self._ensure_trial_state()
+        try:
+            trial = self._ensure_trial_state()
+        except Exception as exc:
+            return LicenseStatus(
+                status="license_invalid",
+                machine_id=self.machine_id,
+                error=str(exc),
+            )
+
         if str(trial.get("machine_id")) != self.machine_id:
             return LicenseStatus(
                 status="license_invalid",
                 machine_id=self.machine_id,
                 error="Trial state machine mismatch",
             )
-        # System time rollback detection.
+
+        # Local clock rollback detection.
         last_seen_raw = str(trial.get("last_seen_utc") or trial.get("first_run_utc"))
         last_seen = _parse_iso(last_seen_raw)
         if _utc_now() + timedelta(minutes=5) < last_seen:
@@ -303,6 +469,8 @@ class LicenseManager:
                 machine_id=self.machine_id,
                 error="System clock rollback detected",
             )
+
+        # Trusted-time rollback detection.
         if trusted_now is not None and trial.get("last_trusted_utc"):
             prev_trusted = _parse_iso(str(trial["last_trusted_utc"]))
             if trusted_now + timedelta(minutes=5) < prev_trusted:
@@ -311,6 +479,15 @@ class LicenseManager:
                     machine_id=self.machine_id,
                     error="Trusted market time rollback detected",
                 )
+
+        # Monotonic signed usage chain.
+        prev_chain = str(trial.get("chain_head") or "")
+        usage_counter = int(trial.get("usage_counter", 0) or 0)
+        seen_utc = _iso(_utc_now())
+        trusted_utc = _iso(trusted_now) if trusted_now is not None else None
+        next_counter = usage_counter + 1
+        next_chain = self._usage_chain_step(prev_chain, next_counter, seen_utc, trusted_utc)
+
         first_run = _parse_iso(str(trial["first_run_utc"]))
         expires = first_run + timedelta(days=self.trial_days)
         if ref_now > expires:
@@ -321,9 +498,15 @@ class LicenseManager:
                 machine_id=self.machine_id,
                 error="Trial expired. Activate a license file.",
             )
-        trial["last_seen_utc"] = _iso(_utc_now())
-        trial["last_trusted_utc"] = _iso(trusted_now) if trusted_now is not None else trial.get("last_trusted_utc")
+
+        trial["last_seen_utc"] = seen_utc
+        trial["last_trusted_utc"] = trusted_utc if trusted_utc is not None else trial.get("last_trusted_utc")
+        trial["usage_counter"] = next_counter
+        trial["chain_head"] = next_chain
         self._save_trial_state(trial)
+        # Ensure secondary anchors remain consistent.
+        self._validate_anchor_integrity(trial)
+
         days_left = max((expires - ref_now).days, 0)
         return LicenseStatus(
             status="trial_active",
