@@ -1,6 +1,6 @@
 MetaTrader5; python_version < "3.12"
 python-dotenv
-numpy
+numpy<2
 fastapi
 uvicorn[standard]
 pydantic

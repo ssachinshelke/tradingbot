@@ -6,11 +6,11 @@ from datetime import datetime
 import logging.config
 from pathlib import Path
 import threading
+import traceback
 from typing import Any
 import webbrowser
 
 import uvicorn
-from ui_backend.server import app
 
 
 def _build_log_config(log_file: Path) -> dict[str, Any]:
@@ -66,18 +66,23 @@ def main() -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = logs_dir / f"ui_backend_{ts}.log"
+    crash_file = logs_dir / f"bootstrap_crash_{ts}.log"
     url = "http://127.0.0.1:8787"
-    # Open browser shortly after startup so users can see UI immediately.
-    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
-
-    uvicorn.run(
-        app,
-        host="127.0.0.1",
-        port=8787,
-        reload=False,
-        timeout_graceful_shutdown=2,
-        log_config=_build_log_config(log_file),
-    )
+    try:
+        from ui_backend.server import app
+        # Open browser shortly after startup so users can see UI immediately.
+        threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=8787,
+            reload=False,
+            timeout_graceful_shutdown=2,
+            log_config=_build_log_config(log_file),
+        )
+    except Exception:
+        crash_file.write_text(traceback.format_exc(), encoding="utf-8")
+        raise
 
 
 if __name__ == "__main__":

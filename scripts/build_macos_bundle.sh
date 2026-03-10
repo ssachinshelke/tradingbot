@@ -10,7 +10,7 @@ cd "$ROOT_DIR"
 echo "Installing build dependencies..."
 "$PYTHON_BIN" -m pip install --upgrade pip
 # MetaTrader5 wheel is Windows-only; skip it on macOS build hosts.
-"$PYTHON_BIN" -m pip install python-dotenv numpy fastapi "uvicorn[standard]" pydantic cryptography
+"$PYTHON_BIN" -m pip install python-dotenv "numpy<2" fastapi "uvicorn[standard]" pydantic cryptography
 "$PYTHON_BIN" -m pip install pyinstaller
 
 echo "Building Tradingm5UI binary (macOS)..."

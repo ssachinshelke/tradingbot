@@ -9,7 +9,7 @@ cd "$ROOT_DIR"
 
 echo "Installing dependencies for hardened build..."
 "$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install python-dotenv numpy fastapi "uvicorn[standard]" pydantic cryptography
+"$PYTHON_BIN" -m pip install python-dotenv "numpy<2" fastapi "uvicorn[standard]" pydantic cryptography
 "$PYTHON_BIN" -m pip install nuitka ordered-set zstandard
 
 echo "Building hardened macOS binary with Nuitka..."

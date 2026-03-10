@@ -443,6 +443,10 @@ Note for macOS:
 - broker rejects comment field for some order types
 - platform now retries with empty comment automatically
 
+### `ImportError: numpy._core.multiarray failed to import`
+- ensure build/runtime uses `numpy<2` (already pinned in `requirements.txt`)
+- rebuild the binary after dependency refresh
+
 ### `Unsupported filling mode`
 - broker/symbol does not support fixed mode
 - platform now tries multiple filling modes automatically
@@ -455,6 +459,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ### `Market closed`
 - broker session is closed for symbol/account
+
+### UI exe crashes before opening browser
+- check `logs/bootstrap_crash_*.log` in the release folder for startup tracebacks
 
 ### Command keeps running in advanced plan
 - by design, chained workflows wait for conditions
