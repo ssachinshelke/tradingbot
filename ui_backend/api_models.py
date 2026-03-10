@@ -22,6 +22,19 @@ class AccountPayload(BaseModel):
     mt5_portable: bool = False
 
 
+class PortableCreateRequest(BaseModel):
+    source_dir: str
+    target_root: str | None = None
+    names_csv: str
+    append_accounts: bool = False
+
+
+class PortableCreateResponse(ApiResponse):
+    target_root: str
+    created_count: int
+    created: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class AccountView(BaseModel):
     name: str
     mt5_login: int

@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
+import shutil
 from threading import Lock
 from typing import Any
 from uuid import uuid4
@@ -44,6 +46,7 @@ class TradingUIService:
         self._request_cache: dict[str, dict[str, Any]] = {}
         self._closed_journal_path = Path("logs") / "closed_deals_journal.jsonl"
         self._closed_journal_path.parent.mkdir(parents=True, exist_ok=True)
+        self._max_ui_accounts = max(1, int(os.getenv("UI_MAX_ACCOUNTS", "4") or "4"))
 
     def _load_accounts(self) -> list[AccountConfig]:
         return load_accounts(str(self._accounts_file))
@@ -171,8 +174,15 @@ class TradingUIService:
 
     def upsert_account(self, payload: dict[str, Any]) -> dict[str, Any]:
         accounts = self._load_accounts()
+        incoming_name = str(payload["name"]).strip()
+        exists = any(a.name == incoming_name for a in accounts)
+        if not exists and len(accounts) >= self._max_ui_accounts:
+            raise ValueError(
+                f"Account limit reached ({self._max_ui_accounts}). "
+                "Delete an account before adding a new one."
+            )
         updated = AccountConfig(
-            name=str(payload["name"]).strip(),
+            name=incoming_name,
             mt5_login=int(payload["mt5_login"]),
             mt5_password=str(payload["mt5_password"]),
             mt5_server=str(payload["mt5_server"]),
@@ -197,6 +207,71 @@ class TradingUIService:
             "mt5_path": updated.mt5_path,
             "mt5_portable": updated.mt5_portable,
             "has_password": bool(updated.mt5_password),
+        }
+
+    def create_portable_copies(
+        self,
+        source_dir: str,
+        names_csv: str,
+        target_root: str | None,
+        append_accounts: bool = False,
+    ) -> dict[str, Any]:
+        if os.name != "nt":
+            raise ValueError("Auto-create portable MT5 folders is currently supported on Windows only.")
+        source = Path(str(source_dir).strip())
+        terminal = source / "terminal64.exe"
+        if not terminal.exists():
+            raise ValueError(f"terminal64.exe not found in source folder: {source}")
+        root = Path(target_root.strip()) if target_root and str(target_root).strip() else Path("mt5-portable")
+        root.mkdir(parents=True, exist_ok=True)
+        names = [n.strip() for n in (names_csv or "").split(",") if n.strip()]
+        if not names:
+            raise ValueError("Provide at least one copy name (comma-separated).")
+
+        created: list[dict[str, Any]] = []
+        for name in names:
+            dst = root / name
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(source, dst)
+            bat = dst / "start-portable.bat"
+            bat.write_text('@echo off\r\nstart "" "%~dp0terminal64.exe" /portable\r\n', encoding="utf-8")
+            created.append(
+                {
+                    "name": name,
+                    "mt5_path": str(dst / "terminal64.exe"),
+                    "start_script": str(bat),
+                }
+            )
+
+        if append_accounts and created:
+            accounts = self._load_accounts()
+            existing_names = {a.name for a in accounts}
+            free_slots = max(0, self._max_ui_accounts - len(accounts))
+            to_append = []
+            for item in created:
+                if item["name"] in existing_names:
+                    continue
+                if len(to_append) >= free_slots:
+                    break
+                to_append.append(
+                    AccountConfig(
+                        name=item["name"],
+                        mt5_login=0,
+                        mt5_password="fill_me",
+                        mt5_server="MetaQuotes-Demo",
+                        mt5_path=item["mt5_path"],
+                        mt5_portable=True,
+                    )
+                )
+            if to_append:
+                self._save_accounts(accounts + to_append)
+
+        return {
+            "target_root": str(root.resolve()),
+            "created_count": len(created),
+            "created": created,
+            "max_accounts": self._max_ui_accounts,
         }
 
     def delete_account(self, name: str) -> bool:
@@ -472,6 +547,115 @@ class TradingUIService:
                 }
             )
         return out
+
+    def get_preflight_report(self, license_status: str, license_error: str | None = None) -> dict[str, Any]:
+        checks: list[dict[str, Any]] = []
+
+        def add_check(code: str, title: str, ok: bool, message: str, *, severity: str = "fail") -> None:
+            checks.append(
+                {
+                    "code": code,
+                    "title": title,
+                    "ok": bool(ok),
+                    "severity": severity,
+                    "message": message,
+                }
+            )
+
+        # License must be active or valid for production trading.
+        lic_ok = license_status in {"trial_active", "license_valid"}
+        add_check(
+            "license",
+            "License status",
+            lic_ok,
+            license_status if lic_ok else (license_error or f"License state: {license_status}"),
+        )
+
+        accounts = self._load_accounts()
+        count_ok = 1 <= len(accounts) <= self._max_ui_accounts
+        add_check(
+            "accounts_count",
+            "Accounts configured",
+            count_ok,
+            f"{len(accounts)} configured (limit {self._max_ui_accounts})",
+        )
+
+        # MT5 module/runtime sanity.
+        mt5_ok = False
+        mt5_msg = "MetaTrader5 module unavailable"
+        try:
+            init_fn = getattr(mt5, "initialize", None)
+            mt5_ok = callable(init_fn)
+            mt5_msg = "MetaTrader5 API import is available" if mt5_ok else mt5_msg
+        except Exception as exc:
+            mt5_msg = str(exc)
+        add_check("mt5_runtime", "MT5 runtime", mt5_ok, mt5_msg)
+
+        # Platform note: macOS build may run UI but MT5 runtime is Windows-first.
+        is_windows = os.name == "nt"
+        add_check(
+            "platform",
+            "Platform suitability",
+            is_windows,
+            "Windows runtime detected" if is_windows else "Non-Windows runtime (trading may be limited)",
+            severity="warn",
+        )
+
+        # Accounts file exists and is writable.
+        file_ok = self._accounts_file.exists()
+        add_check(
+            "accounts_file",
+            "Accounts file",
+            file_ok,
+            str(self._accounts_file.resolve()) if file_ok else f"Missing file: {self._accounts_file}",
+        )
+
+        # Logs writable.
+        logs_ok = True
+        logs_msg = "Logs folder is writable"
+        try:
+            logs_dir = Path("logs")
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            probe = logs_dir / ".preflight_write_test"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+        except Exception as exc:
+            logs_ok = False
+            logs_msg = f"Cannot write logs: {exc}"
+        add_check("logs_write", "Log write access", logs_ok, logs_msg)
+
+        # Broker/account reachability check.
+        if accounts:
+            try:
+                results = self.run_healthcheck(None, self.cfg.default_symbol)
+                ok_count = sum(1 for r in results if r.get("ok"))
+                add_check(
+                    "healthcheck",
+                    "Account healthcheck",
+                    ok_count == len(results) and len(results) > 0,
+                    f"{ok_count}/{len(results)} accounts healthy",
+                )
+            except Exception as exc:
+                add_check("healthcheck", "Account healthcheck", False, str(exc))
+        else:
+            add_check("healthcheck", "Account healthcheck", False, "No accounts configured")
+
+        hard_fail = [c for c in checks if not c["ok"] and c["severity"] == "fail"]
+        warn_only = [c for c in checks if not c["ok"] and c["severity"] == "warn"]
+        status = "green" if not hard_fail else "red"
+
+        return {
+            "status": status,
+            "ready_to_trade": len(hard_fail) == 0,
+            "checked_at_utc": _now_iso(),
+            "summary": {
+                "pass": sum(1 for c in checks if c["ok"]),
+                "fail": len(hard_fail),
+                "warn": len(warn_only),
+                "total": len(checks),
+            },
+            "checks": checks,
+        }
 
     def close_positions(
         self,

@@ -4,6 +4,7 @@
 
 // ── API layer ──────────────────────────────────────────────
 const API = {
+  MAX_ACCOUNTS: 4,
   _json(r) {
     if (!r.ok) return r.json().then(d => { throw d; });
     return r.json();
@@ -14,6 +15,7 @@ const API = {
 
   getAccounts()           { return this.get('/api/accounts'); },
   upsertAccount(p)        { return this.post('/api/accounts', p); },
+  createPortable(p)       { return this.post('/api/accounts/create-portable', p); },
   deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
   healthcheckAll()        { return this.post('/api/healthcheck', {}); },
   healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
@@ -49,6 +51,9 @@ const API = {
   systemLogs(limit = 20) {
     return this.get(`/api/system/logs?limit=${encodeURIComponent(String(limit))}`);
   },
+  preflight() {
+    return this.get('/api/system/preflight');
+  },
 };
 
 // ── State ──────────────────────────────────────────────────
@@ -80,6 +85,34 @@ function showSpinner(btn) {
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderPreflightResult(res) {
+  const checks = Array.isArray(res.checks) ? res.checks : [];
+  const badge = $('#preflightBadge');
+  if (badge) {
+    badge.textContent = `Status: ${String(res.status || 'unknown').toUpperCase()} | Ready: ${res.ready_to_trade ? 'YES' : 'NO'}`;
+    badge.style.color = res.ready_to_trade ? 'var(--green)' : 'var(--red)';
+  }
+  const summary = res.summary || {};
+  const rows = checks.map(c => ({
+    code: c.code,
+    ok: c.ok,
+    severity: c.severity,
+    message: c.message,
+  }));
+  setResult('preflightResult', {
+    checked_at_utc: res.checked_at_utc,
+    status: res.status,
+    ready_to_trade: !!res.ready_to_trade,
+    summary: {
+      pass: Number(summary.pass || 0),
+      fail: Number(summary.fail || 0),
+      warn: Number(summary.warn || 0),
+      total: Number(summary.total || 0),
+    },
+    checks: rows,
+  });
+}
 
 // ── Tab switching ──────────────────────────────────────────
 $('#tabNav').addEventListener('click', e => {
@@ -118,6 +151,16 @@ function renderAccounts() {
         <button class="btn-sm btn-red del-acc" data-name="${esc(acc.name)}">Del</button>
       </td>`;
     tbody.appendChild(tr);
+  }
+  const limitStatus = $('#accountLimitStatus');
+  const addDisabled = state.accounts.length >= API.MAX_ACCOUNTS;
+  if (limitStatus) {
+    limitStatus.textContent = `Accounts configured: ${state.accounts.length}/${API.MAX_ACCOUNTS}`;
+  }
+  const saveBtn = $('#accountForm button[type="submit"]');
+  if (saveBtn) {
+    saveBtn.disabled = addDisabled;
+    saveBtn.title = addDisabled ? `Limit reached (${API.MAX_ACCOUNTS})` : '';
   }
   renderHistoryAccountFilter();
   populateAccountSelects();
@@ -164,10 +207,40 @@ $('#accountForm').addEventListener('submit', async e => {
     mt5_portable: f.get('mt5_portable') === 'on',
   };
   try {
+    const isExisting = state.accounts.some(a => a.name === payload.name);
+    if (!isExisting && state.accounts.length >= API.MAX_ACCOUNTS) {
+      alert(`Only ${API.MAX_ACCOUNTS} accounts are allowed in this build to reduce execution delay.`);
+      return;
+    }
     await API.upsertAccount(payload);
     e.target.reset();
     await loadAccounts();
   } catch (err) { alert('Save failed: ' + (err.detail || err.message || JSON.stringify(err))); }
+});
+
+$('#portableForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    source_dir: String(f.get('source_dir') || '').trim(),
+    target_root: String(f.get('target_root') || '').trim() || null,
+    names_csv: String(f.get('names_csv') || '').trim(),
+    append_accounts: f.get('append_accounts') === 'on',
+  };
+  if (!payload.source_dir || !payload.names_csv) {
+    setResult('portableResult', { ok: false, error: 'source_dir and names_csv are required.' });
+    return;
+  }
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const done = showSpinner(submitBtn);
+  try {
+    const out = await API.createPortable(payload);
+    setResult('portableResult', out);
+    await loadAccounts();
+  } catch (err) {
+    setResult('portableResult', { ok: false, error: err.detail || err.message || String(err) });
+  }
+  done();
 });
 
 $('#healthcheckAllBtn').addEventListener('click', async function () {
@@ -320,6 +393,26 @@ $('#submitAllOrdersBtn').addEventListener('click', async function () {
     setResult('tradingResult', res);
   } catch (err) {
     setResult('tradingResult', { error: err.detail || err.message || JSON.stringify(err) });
+  }
+  done();
+});
+
+$('#runPreflightBtn').addEventListener('click', async function () {
+  const done = showSpinner(this);
+  const badge = $('#preflightBadge');
+  if (badge) {
+    badge.textContent = 'Status: RUNNING...';
+    badge.style.color = '';
+  }
+  try {
+    const res = await API.preflight();
+    renderPreflightResult(res);
+  } catch (err) {
+    if (badge) {
+      badge.textContent = 'Status: ERROR';
+      badge.style.color = 'var(--red)';
+    }
+    setResult('preflightResult', { ok: false, error: err.detail || err.message || String(err) });
   }
   done();
 });
@@ -757,6 +850,10 @@ if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistoryMiniO
   refreshLogs();
   connectWS();
   createOrderRow();
+  try {
+    const pre = await API.preflight();
+    renderPreflightResult(pre);
+  } catch {}
   refreshHistory();
   refreshHistoryMiniOnly();
   setInterval(refreshHistory, 15000);

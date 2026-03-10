@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import urllib.error
+import urllib.request
 import uuid
 from typing import Any, Callable
 
@@ -66,6 +68,13 @@ class LicenseManager:
         self.trial_days = trial_days
         self._trusted_time_provider = trusted_time_provider
         self.strict_trusted_time = _env_bool("LICENSE_STRICT_TRUSTED_TIME", True)
+        self.validation_url = os.getenv("LICENSE_VALIDATION_URL", "").strip()
+        self.validation_token = os.getenv("LICENSE_VALIDATION_TOKEN", "").strip()
+        self.require_online_validation = _env_bool("LICENSE_REQUIRE_ONLINE_VALIDATION", False)
+        self.online_validation_timeout_sec = max(
+            1.0,
+            float(os.getenv("LICENSE_ONLINE_VALIDATION_TIMEOUT_SEC", "5") or "5"),
+        )
 
         self.machine_id = self._machine_fingerprint()
         self.state_dir = self._resolve_state_dir()
@@ -375,6 +384,56 @@ class LicenseManager:
             return False, "License expired"
         return True, None
 
+    def _online_validate_license(
+        self,
+        doc: dict[str, Any],
+        reference_now: datetime,
+    ) -> tuple[bool, str | None]:
+        """Optional server-side validation for high-value license checks."""
+        if not self.validation_url:
+            if self.require_online_validation:
+                return False, "LICENSE_VALIDATION_URL is required in strict online validation mode"
+            return True, None
+        payload = doc.get("payload")
+        if not isinstance(payload, dict):
+            return False, "Invalid license payload for online validation"
+        body = {
+            "product": self.product_name,
+            "machine_id": self.machine_id,
+            "customer_id": str(payload.get("customer_id", "")),
+            "license_id": str(payload.get("license_id", "")),
+            "machine_hash": str(payload.get("machine_hash", "")),
+            "issued_at": str(payload.get("issued_at", "")),
+            "expires_at": str(payload.get("expires_at", "")),
+            "reference_now_utc": _iso(reference_now),
+        }
+        req = urllib.request.Request(
+            self.validation_url,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                **({"Authorization": f"Bearer {self.validation_token}"} if self.validation_token else {}),
+            },
+            data=json.dumps(body, separators=(",", ":")).encode("utf-8"),
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.online_validation_timeout_sec) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                out = json.loads(raw) if raw else {}
+        except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+            if self.require_online_validation:
+                return False, f"Online validation failed: {exc}"
+            return True, None
+
+        if not isinstance(out, dict):
+            if self.require_online_validation:
+                return False, "Online validation returned invalid response"
+            return True, None
+        allow = bool(out.get("allow", out.get("ok", True)))
+        if not allow:
+            return False, str(out.get("reason", "License rejected by validation service"))
+        return True, None
+
     def activate_from_file(self, path: str) -> LicenseStatus:
         file_path = Path(path)
         if not file_path.exists():
@@ -390,6 +449,13 @@ class LicenseManager:
 
             doc = json.loads(file_path.read_text(encoding="utf-8"))
             ok, err = self._verify_license_document(doc, reference_now=ref_now)
+            if not ok:
+                return LicenseStatus(
+                    status="license_invalid",
+                    machine_id=self.machine_id,
+                    error=err,
+                )
+            ok, err = self._online_validate_license(doc, reference_now=ref_now)
             if not ok:
                 return LicenseStatus(
                     status="license_invalid",
@@ -426,6 +492,8 @@ class LicenseManager:
                 self._ensure_trial_state()
                 doc = json.loads(self.license_store_path.read_text(encoding="utf-8"))
                 ok, err = self._verify_license_document(doc, reference_now=ref_now)
+                if ok:
+                    ok, err = self._online_validate_license(doc, reference_now=ref_now)
                 if ok:
                     return LicenseStatus(
                         status="license_valid",

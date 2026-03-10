@@ -39,6 +39,54 @@ Open:
 
 ---
 
+## 1.1) Release Onboarding (Windows + macOS)
+
+This section is for binary users (no source code access needed).
+
+### What is supported in the release
+- Single-click launch:
+  - Windows: `Tradingm5UI.exe` (double-click)
+  - macOS: `start_ui.command` (double-click) or `./Tradingm5UI`
+- Add/edit/delete accounts from UI (`Accounts` tab)
+- Place different orders on multiple accounts in parallel (`Trading` tab)
+- One-click Preflight (green/red readiness report before trading)
+- Live P/L and live book updates via WebSocket snapshots
+- History view with `All Executions` / `Closed Only` modes
+- Auto-create MT5 portable folders from UI (`Accounts` tab, Windows only)
+- Account limit guard: max `4` accounts per UI build (to reduce execution delay)
+
+### Windows user guide (end-to-end)
+1. Download release zip and extract.
+2. Double-click `Tradingm5UI.exe`.
+3. In `Accounts` tab:
+   - Add Account 1 and Account 2.
+   - Run `Healthcheck All` and confirm both are OK.
+4. Optional: auto-create portable MT5 folders:
+   - Open `Auto-Create Portable MT5 Folders (Windows)`.
+   - Set source folder (must contain `terminal64.exe`), target root, and names.
+   - Click `Create Portable Folders`.
+5. Go to `Trading` tab:
+   - Click `Run Preflight` and confirm `Ready: YES`.
+   - Add one order row per account.
+   - Use `Find` to search valid symbols per account.
+   - Click `Submit All Orders`.
+6. Verify realtime:
+   - `Live Book` shows open positions and floating P/L.
+   - `History` shows executions and close profit.
+
+### macOS user guide
+1. Download macOS release zip and extract.
+2. Run `start_ui.command` (first launch may require Security approval).
+3. Open `http://127.0.0.1:8787`.
+4. Use `Accounts`, `Trading`, `Live Book`, and `History` tabs the same way as Windows.
+
+Important for macOS:
+- MT5 Python integration is Windows-first.
+- Full live trading/order execution depends on MT5 runtime availability on that macOS setup.
+- For production trading reliability, Windows remains the primary supported runtime.
+
+---
+
 ## 2) Configuration Files
 
 ### `.env`
@@ -225,6 +273,7 @@ Execution model:
 UI provides one dashboard for:
 - account CRUD + per-account/all-account healthcheck
 - quick multi-order form (minimal input: symbol, side, volume, optional trigger/sl/tp)
+- one-click preflight readiness checks before order submission
 - plan submission
 - live active positions + pending orders
 - realtime floating P/L
@@ -272,6 +321,10 @@ Notes:
 - private key must stay with vendor only
 - public key goes to `LICENSE_PUBLIC_KEY_B64` on client side
 - this is an offline hardened licensing model (strong deterrence, not mathematically unbreakable)
+- optional production server-side validation is supported with:
+  - `LICENSE_VALIDATION_URL`
+  - `LICENSE_VALIDATION_TOKEN`
+  - `LICENSE_REQUIRE_ONLINE_VALIDATION=true` (fail closed if validation service is unavailable)
 
 ---
 
@@ -322,6 +375,32 @@ chmod +x ./scripts/start_ui.command
 Recommended hardening for production distribution:
 - code sign binaries (Windows Authenticode, Apple Developer ID)
 - notarize macOS binary/app before sharing externally
+
+### Hardened production build (Nuitka)
+Use Nuitka builds for stronger reverse-engineering resistance of Python logic.
+
+Windows:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_nuitka.ps1 -Version v1
+```
+
+macOS:
+```bash
+chmod +x ./scripts/build_macos_nuitka.sh
+./scripts/build_macos_nuitka.sh v1
+```
+
+### Binary signing
+Windows signing:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\sign_windows.ps1 -FilePath ".\dist\Tradingm5UI.exe" -CertFile "C:\path\codesign.pfx" -CertPassword "<password>"
+```
+
+macOS signing:
+```bash
+chmod +x ./scripts/sign_macos.sh
+./scripts/sign_macos.sh "./dist/Tradingm5UI" "Developer ID Application: YOUR_ORG"
+```
 
 ### Automatic release via GitHub (Windows + macOS)
 This repo includes `.github/workflows/release.yml`.

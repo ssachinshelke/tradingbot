@@ -26,6 +26,8 @@ from .api_models import (
     HealthResponse,
     LicenseActivateRequest,
     LicenseStatusResponse,
+    PortableCreateRequest,
+    PortableCreateResponse,
     PlanSubmitRequest,
     PlanSubmitResponse,
     PendingCancelRequest,
@@ -160,6 +162,23 @@ def upsert_account(payload: AccountPayload) -> dict[str, Any]:
         return service.upsert_account(payload.model_dump())
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/accounts/create-portable", response_model=PortableCreateResponse)
+async def create_portable_accounts(req: PortableCreateRequest) -> PortableCreateResponse:
+    try:
+        out = await _run_blocking(
+            service.create_portable_copies,
+            source_dir=req.source_dir,
+            names_csv=req.names_csv,
+            target_root=req.target_root,
+            append_accounts=req.append_accounts,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PortableCreateResponse(ok=True, **out)
 
 
 @app.delete("/api/accounts/{name}", response_model=ApiResponse)
@@ -339,6 +358,22 @@ async def closed_history(
 def system_logs(limit: int = 20) -> dict[str, Any]:
     items = service.get_log_files(limit=limit)
     return {"ok": True, "count": len(items), "items": items}
+
+
+@app.get("/api/system/preflight")
+async def system_preflight() -> dict[str, Any]:
+    lic = license_manager.status()
+    try:
+        payload = await _run_blocking(
+            service.get_preflight_report,
+            license_status=lic.status,
+            license_error=lic.error,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **payload}
 
 
 @app.get("/api/license/status", response_model=LicenseStatusResponse)

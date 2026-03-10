@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260310-7">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310-9">
 </head>
 <body>
   <header class="topbar">
@@ -43,6 +43,16 @@
     </div>
     <div class="result-box" id="tradingResult"></div>
 
+    <div class="panel-header" style="margin-top:12px">
+      <h3>Preflight</h3>
+      <p class="sub">Run one-click readiness checks before placing live orders.</p>
+    </div>
+    <div class="book-toolbar">
+      <button id="runPreflightBtn" class="btn-sm btn-accent">Run Preflight</button>
+      <span id="preflightBadge" class="status-text">Status: unknown</span>
+    </div>
+    <div class="result-box" id="preflightResult"></div>
+
     <p class="sub">Advanced JSON plan is available via API endpoint: <code>/api/trade/submit-plan</code></p>
   </section>
 
@@ -50,6 +60,7 @@
   <section class="panel" id="panel-accounts">
     <div class="panel-header">
       <h2>Manage Accounts</h2>
+      <p class="sub" id="accountLimitHint">Max 4 accounts allowed for low-latency execution.</p>
     </div>
     <form id="accountForm" class="acc-form">
       <input name="name" placeholder="account name" required>
@@ -60,6 +71,19 @@
       <label class="cb-label"><input name="mt5_portable" type="checkbox"> portable</label>
       <button type="submit" class="btn-sm btn-accent">Save Account</button>
     </form>
+    <div class="sub" id="accountLimitStatus"></div>
+    <div class="panel-header" style="margin-top:12px">
+      <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
+      <p class="sub">Creates folder copies and optional account stubs from one source terminal.</p>
+    </div>
+    <form id="portableForm" class="acc-form">
+      <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
+      <input name="target_root" placeholder="target root (optional, default mt5-portable)">
+      <input name="names_csv" placeholder="copy names (comma-separated: acc1,acc2)" required>
+      <label class="cb-label"><input name="append_accounts" type="checkbox"> append account stubs</label>
+      <button type="submit" class="btn-sm btn-accent">Create Portable Folders</button>
+    </form>
+    <div class="result-box" id="portableResult"></div>
     <div class="acc-toolbar">
       <button id="healthcheckAllBtn" class="btn-sm btn-green">Healthcheck All</button>
       <span id="healthStatus" class="status-text"></span>
@@ -168,6 +192,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-7"></script>
+  <script src="/ui/app.js?v=20260310-9"></script>
 </body>
 </html>
