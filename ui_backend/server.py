@@ -28,6 +28,8 @@ from .api_models import (
     LicenseStatusResponse,
     PlanSubmitRequest,
     PlanSubmitResponse,
+    PendingCancelRequest,
+    PendingCancelResponse,
     QuickMultiOrderRequest,
     QuickMultiOrderResponse,
 )
@@ -83,7 +85,7 @@ class WebSocketHub:
 
 
 service = TradingUIService()
-license_manager = LicenseManager()
+license_manager = LicenseManager(trusted_time_provider=service.get_trusted_time_utc)
 hub = WebSocketHub()
 
 
@@ -179,6 +181,22 @@ async def healthcheck_one(account_name: str, symbol: str | None = None) -> dict[
     return await _run_blocking(service.run_healthcheck_one, account_name=account_name, symbol=symbol)
 
 
+@app.get("/api/symbols/{account_name}")
+async def symbols_for_account(account_name: str, q: str | None = None, limit: int = 30) -> dict[str, Any]:
+    try:
+        items = await _run_blocking(
+            service.search_symbols,
+            account_name=account_name,
+            query=q,
+            limit=limit,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "account": account_name, "count": len(items), "items": items}
+
+
 @app.post("/api/trade/submit-plan", response_model=PlanSubmitResponse)
 async def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
     lic = license_manager.status()
@@ -264,6 +282,50 @@ async def close_order(req: CloseRequest) -> CloseResponse:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return CloseResponse(ok=True, **out)
+
+
+@app.post("/api/orders/cancel-pending", response_model=PendingCancelResponse)
+async def cancel_pending(req: PendingCancelRequest) -> PendingCancelResponse:
+    lic = license_manager.status()
+    if lic.status in ("trial_expired", "license_invalid"):
+        raise HTTPException(status_code=403, detail=lic.error or "License invalid")
+    try:
+        out = await _run_blocking(
+            service.cancel_pending_order,
+            account_name=req.account,
+            ticket=req.ticket,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PendingCancelResponse(ok=True, **out)
+
+
+@app.get("/api/history/closed")
+async def closed_history(
+    account_name: str | None = None,
+    days: int = 7,
+    limit: int = 300,
+) -> dict[str, Any]:
+    try:
+        rows = await _run_blocking(
+            service.get_closed_deals,
+            account_name=account_name,
+            days=days,
+            limit=limit,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "count": len(rows), "items": rows}
+
+
+@app.get("/api/system/logs")
+def system_logs(limit: int = 20) -> dict[str, Any]:
+    items = service.get_log_files(limit=limit)
+    return {"ok": True, "count": len(items), "items": items}
 
 
 @app.get("/api/license/status", response_model=LicenseStatusResponse)

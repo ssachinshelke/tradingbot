@@ -130,6 +130,20 @@ class CloseResponse(ApiResponse):
     details: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class PendingCancelRequest(BaseModel):
+    account: str
+    ticket: int
+
+
+class PendingCancelResponse(ApiResponse):
+    account: str
+    ticket: int
+    symbol: str | None = None
+    retcode: int | None = None
+    order: int | None = None
+    comment: str | None = None
+
+
 class LicenseStatusResponse(ApiResponse):
     status: Literal["trial_active", "trial_expired", "license_valid", "license_invalid"]
     expires_at: datetime | None = None

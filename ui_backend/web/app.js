@@ -17,6 +17,10 @@ const API = {
   deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
   healthcheckAll()        { return this.post('/api/healthcheck', {}); },
   healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
+  searchSymbols(account, query = '', limit = 20) {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.get(`/api/symbols/${encodeURIComponent(account)}?${params.toString()}`);
+  },
   submitPlan(rows)        { return this.post('/api/trade/submit-plan', { plan_rows: rows, timeout_seconds: 30, poll_seconds: 0.5 }); },
   quickMulti(body)        { return this.post('/api/trade/quick-multi', body); },
   getBook()               { return this.get('/api/orders/active'); },
@@ -27,8 +31,19 @@ const API = {
     }
     return this.post('/api/orders/close', body);
   },
+  cancelPendingOrder(account, ticket) {
+    return this.post('/api/orders/cancel-pending', { account, ticket: Number(ticket) });
+  },
   licenseStatus()         { return this.get('/api/license/status'); },
   activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
+  closedHistory(accountName = '', days = 7, limit = 300) {
+    const params = new URLSearchParams({ days: String(days), limit: String(limit) });
+    if (accountName) params.set('account_name', accountName);
+    return this.get(`/api/history/closed?${params.toString()}`);
+  },
+  systemLogs(limit = 20) {
+    return this.get(`/api/system/logs?limit=${encodeURIComponent(String(limit))}`);
+  },
 };
 
 // ── State ──────────────────────────────────────────────────
@@ -99,7 +114,16 @@ function renderAccounts() {
       </td>`;
     tbody.appendChild(tr);
   }
+  renderHistoryAccountFilter();
   populateAccountSelects();
+}
+
+function renderHistoryAccountFilter() {
+  const sel = $('#historyAccount');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All Accounts</option>' +
+    state.accounts.map(a => `<option value="${esc(a.name)}"${a.name === current ? ' selected' : ''}>${esc(a.name)}</option>`).join('');
 }
 
 $('#accountsTable').addEventListener('click', async e => {
@@ -175,7 +199,9 @@ function createOrderRow() {
   div.innerHTML = `
     <select data-field="account"><option value="">-- account --</option></select>
     <select data-field="side"><option value="buy">BUY</option><option value="sell">SELL</option></select>
-    <input data-field="symbol" placeholder="symbol" value="EURUSD" class="field-wide">
+    <input data-field="symbol" placeholder="symbol" value="EURUSD" class="field-wide" list="sym-list-${id}">
+    <datalist id="sym-list-${id}"></datalist>
+    <button class="btn-sm btn-muted sym-find-btn" title="Search symbols for selected account">Find</button>
     <input data-field="volume" type="number" step="0.01" min="0.01" placeholder="vol" value="0.1" style="width:70px">
     <input data-field="trigger_price" type="number" step="0.00001" placeholder="trigger (opt)" style="width:100px">
     <input data-field="sl_price" type="number" step="0.00001" placeholder="SL (opt)" style="width:90px">
@@ -189,7 +215,40 @@ function createOrderRow() {
 $('#addOrderRowBtn').addEventListener('click', () => createOrderRow());
 $('#clearOrderRowsBtn').addEventListener('click', () => { $('#orderRows').innerHTML = ''; setResult('tradingResult', ''); });
 $('#orderRows').addEventListener('click', e => {
-  if (e.target.closest('.remove-row-btn')) e.target.closest('.order-row').remove();
+  if (e.target.closest('.remove-row-btn')) {
+    e.target.closest('.order-row').remove();
+    return;
+  }
+  const findBtn = e.target.closest('.sym-find-btn');
+  if (findBtn) {
+    const row = findBtn.closest('.order-row');
+    if (!row) return;
+    const account = row.querySelector('[data-field="account"]')?.value?.trim();
+    const symbolInput = row.querySelector('[data-field="symbol"]');
+    if (!account) {
+      setResult('tradingResult', { ok: false, error: 'Select account first, then use Find for symbols.' });
+      return;
+    }
+    const q = symbolInput?.value?.trim() || '';
+    const done = showSpinner(findBtn);
+    API.searchSymbols(account, q, 40)
+      .then((res) => {
+        const dl = row.querySelector(`datalist#sym-list-${row.dataset.rowId}`);
+        if (!dl) return;
+        dl.innerHTML = '';
+        for (const item of (res.items || [])) {
+          const opt = document.createElement('option');
+          opt.value = item.name;
+          opt.label = item.description ? `${item.name} - ${item.description}` : item.name;
+          dl.appendChild(opt);
+        }
+        setResult('tradingResult', { ok: true, account, symbols_found: (res.items || []).length, query: q });
+      })
+      .catch((err) => {
+        setResult('tradingResult', { ok: false, error: err.detail || err.message || String(err) });
+      })
+      .finally(done);
+  }
 });
 
 function collectOrderRows() {
@@ -255,6 +314,13 @@ function updateCloseSelectedBtn() {
   btn.textContent = checked.length > 0 ? `Close Selected (${checked.length})` : 'Close Selected';
 }
 
+function updateCancelPendingSelectedBtn() {
+  const checked = $$('#ordersTable tbody .pending-check:checked');
+  const btn = $('#cancelSelectedPendingBtn');
+  btn.disabled = checked.length === 0;
+  btn.textContent = checked.length > 0 ? `Cancel Selected Pending (${checked.length})` : 'Cancel Selected Pending';
+}
+
 function renderBook(data) {
   const profit = Number(data.total_profit || 0);
   const profStr = profit.toFixed(2);
@@ -301,10 +367,16 @@ function renderBook(data) {
   updateCloseSelectedBtn();
 
   const ordTbody = $('#ordersTable tbody');
+  const previouslyPendingChecked = new Set(
+    $$('#ordersTable tbody .pending-check:checked').map(cb => cb.dataset.key)
+  );
   ordTbody.innerHTML = '';
   for (const o of (data.pending_orders || [])) {
+    const key = `${o.account}|${o.ticket}`;
+    const checked = previouslyPendingChecked.has(key) ? ' checked' : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
+      <td><input type="checkbox" class="pending-check" data-key="${key}" data-account="${esc(o.account)}" data-ticket="${o.ticket}"${checked}></td>
       <td>${esc(o.account)}</td>
       <td>${o.ticket}</td>
       <td>${esc(o.symbol)}</td>
@@ -312,9 +384,17 @@ function renderBook(data) {
       <td>${o.volume}</td>
       <td>${o.price_open}</td>
       <td>${o.sl || 0}</td>
-      <td>${o.tp || 0}</td>`;
+      <td>${o.tp || 0}</td>
+      <td><button class="btn-sm btn-red cancel-pending-btn" data-account="${esc(o.account)}" data-ticket="${o.ticket}">Cancel</button></td>`;
     ordTbody.appendChild(tr);
   }
+  const selectAllPending = document.getElementById('selectAllPending');
+  if (selectAllPending) {
+    selectAllPending.checked =
+      (data.pending_orders || []).length > 0 &&
+      previouslyPendingChecked.size === (data.pending_orders || []).length;
+  }
+  updateCancelPendingSelectedBtn();
 }
 
 // select-all checkbox
@@ -326,6 +406,15 @@ document.getElementById('selectAllPos').addEventListener('change', function () {
 // individual checkbox changes
 $('#positionsTable').addEventListener('change', e => {
   if (e.target.classList.contains('pos-check')) updateCloseSelectedBtn();
+});
+
+document.getElementById('selectAllPending').addEventListener('change', function () {
+  $$('#ordersTable tbody .pending-check').forEach(cb => { cb.checked = this.checked; });
+  updateCancelPendingSelectedBtn();
+});
+
+$('#ordersTable').addEventListener('change', e => {
+  if (e.target.classList.contains('pending-check')) updateCancelPendingSelectedBtn();
 });
 
 // single position close
@@ -426,6 +515,119 @@ $('#closeAllBtn').addEventListener('click', async function () {
   done();
 });
 
+$('#ordersTable').addEventListener('click', async e => {
+  const btn = e.target.closest('.cancel-pending-btn');
+  if (!btn) return;
+  const { account, ticket } = btn.dataset;
+  const done = showSpinner(btn);
+  $('#pendingStatus').textContent = `Cancelling pending #${ticket} on ${account}...`;
+  try {
+    await API.cancelPendingOrder(account, ticket);
+    $('#pendingStatus').textContent = `Cancelled pending #${ticket}`;
+  } catch (err) {
+    $('#pendingStatus').textContent = 'Cancel failed: ' + (err.detail || err.message || '');
+  }
+  done();
+});
+
+$('#cancelSelectedPendingBtn').addEventListener('click', async function () {
+  const checked = $$('#ordersTable tbody .pending-check:checked');
+  if (!checked.length) return;
+  if (!confirm(`Cancel ${checked.length} selected pending order(s)?`)) return;
+
+  const done = showSpinner(this);
+  $('#pendingStatus').textContent = `Cancelling ${checked.length} pending order(s)...`;
+  const jobs = new Map();
+  for (const cb of checked) {
+    const key = `${cb.dataset.account}|${cb.dataset.ticket}`;
+    if (!jobs.has(key)) {
+      jobs.set(key, { account: cb.dataset.account, ticket: cb.dataset.ticket });
+    }
+  }
+  const results = await Promise.all(
+    [...jobs.values()].map(j =>
+      API.cancelPendingOrder(j.account, j.ticket).catch(err => ({ error: err.detail || err.message || String(err) }))
+    )
+  );
+  const errors = results.filter(r => r.error).length;
+  $('#pendingStatus').textContent = `Cancelled ${results.length - errors} pending order(s)` + (errors ? `, ${errors} failed` : '');
+  done();
+});
+
+$('#cancelAllPendingBtn').addEventListener('click', async function () {
+  const checks = $$('#ordersTable tbody .pending-check');
+  if (!checks.length) {
+    $('#pendingStatus').textContent = 'No pending orders.';
+    return;
+  }
+  if (!confirm(`Cancel ALL ${checks.length} pending order(s)?`)) return;
+  const done = showSpinner(this);
+  $('#pendingStatus').textContent = `Cancelling all ${checks.length} pending order(s)...`;
+
+  const jobs = new Map();
+  for (const cb of checks) {
+    const key = `${cb.dataset.account}|${cb.dataset.ticket}`;
+    if (!jobs.has(key)) {
+      jobs.set(key, { account: cb.dataset.account, ticket: cb.dataset.ticket });
+    }
+  }
+  const results = await Promise.all(
+    [...jobs.values()].map(j =>
+      API.cancelPendingOrder(j.account, j.ticket).catch(err => ({ error: err.detail || err.message || String(err) }))
+    )
+  );
+  const errors = results.filter(r => r.error).length;
+  $('#pendingStatus').textContent = `Cancelled ${results.length - errors} pending order(s)` + (errors ? `, ${errors} failed` : '');
+  done();
+});
+
+async function refreshHistory() {
+  const account = $('#historyAccount')?.value || '';
+  const daysRaw = Number($('#historyDays')?.value || 7);
+  const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(daysRaw, 365)) : 7;
+  $('#historyStatus').textContent = 'Loading...';
+  try {
+    const res = await API.closedHistory(account, days, 500);
+    const tbody = $('#historyTable tbody');
+    tbody.innerHTML = '';
+    for (const item of (res.items || [])) {
+      const tr = document.createElement('tr');
+      const profit = Number(item.profit || 0);
+      tr.innerHTML = `
+        <td>${item.executed_at_utc || ''}</td>
+        <td>${esc(item.account)}</td>
+        <td>${item.deal_ticket}</td>
+        <td>${item.order_ticket}</td>
+        <td>${item.position_id}</td>
+        <td>${esc(item.symbol)}</td>
+        <td>${item.side}</td>
+        <td>${item.volume}</td>
+        <td>${item.price}</td>
+        <td class="${profitClass(profit)}">${profit.toFixed(2)}</td>
+        <td>${esc(item.comment || '')}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+    $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows`;
+  } catch (err) {
+    $('#historyStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
+  }
+}
+
+async function refreshLogs() {
+  $('#logsStatus').textContent = 'Loading...';
+  try {
+    const res = await API.systemLogs(20);
+    setResult('logsResult', {
+      folder: 'logs',
+      files: res.items || [],
+    });
+    $('#logsStatus').textContent = `${(res.items || []).length} file(s)`;
+  } catch (err) {
+    $('#logsStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
+  }
+}
+
 // ── WebSocket realtime ─────────────────────────────────────
 let ws = null;
 let wsRetry = 1000;
@@ -473,11 +675,15 @@ $('#activateLicenseBtn').addEventListener('click', async function () {
 });
 
 $('#refreshLicenseBtn').addEventListener('click', refreshLicense);
+$('#refreshHistoryBtn').addEventListener('click', refreshHistory);
+$('#refreshLogsBtn').addEventListener('click', refreshLogs);
 
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {
   await loadAccounts();
   refreshLicense();
+  refreshLogs();
   connectWS();
   createOrderRow();
+  refreshHistory();
 })();

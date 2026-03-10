@@ -22,6 +22,7 @@
     <button class="tab active" data-tab="trading">Trading</button>
     <button class="tab" data-tab="accounts">Accounts</button>
     <button class="tab" data-tab="book">Live Book</button>
+    <button class="tab" data-tab="history">History</button>
     <button class="tab" data-tab="license">License</button>
   </nav>
 
@@ -37,6 +38,7 @@
         <button id="submitAllOrdersBtn" class="btn-sm btn-green">Submit All Orders</button>
         <button id="clearOrderRowsBtn" class="btn-sm btn-muted">Clear All</button>
       </div>
+      <div class="sub">Tip: use the row-level Find button to search valid symbols for that account.</div>
       <div id="orderRows" class="order-rows"></div>
     </div>
     <div class="result-box" id="tradingResult"></div>
@@ -93,8 +95,39 @@
     </table>
 
     <h3>Pending Orders</h3>
+    <p class="sub">Pending orders are not filled yet. They wait for trigger/limit/stop price conditions.</p>
+    <div class="book-toolbar">
+      <button id="cancelSelectedPendingBtn" class="btn-sm btn-red" disabled>Cancel Selected Pending</button>
+      <button id="cancelAllPendingBtn" class="btn-sm btn-red">Cancel All Pending</button>
+      <span id="pendingStatus" class="status-text"></span>
+    </div>
     <table id="ordersTable" class="tbl">
-      <thead><tr><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>SL</th><th>TP</th></tr></thead>
+      <thead><tr><th><input type="checkbox" id="selectAllPending"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>SL</th><th>TP</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <!-- ─── HISTORY TAB ─────────────────────────────────────── -->
+  <section class="panel" id="panel-history">
+    <div class="panel-header">
+      <h2>Closed Orders / Deals</h2>
+      <p class="sub">See execution time, price, and profit for closed trades.</p>
+    </div>
+    <div class="book-toolbar">
+      <select id="historyAccount">
+        <option value="">All Accounts</option>
+      </select>
+      <input id="historyDays" type="number" min="1" max="365" value="7" style="width:90px">
+      <button id="refreshHistoryBtn" class="btn-sm btn-accent">Refresh History</button>
+      <span id="historyStatus" class="status-text"></span>
+    </div>
+    <table id="historyTable" class="tbl">
+      <thead>
+        <tr>
+          <th>Exec Time (UTC)</th><th>Account</th><th>Deal</th><th>Order</th><th>Position</th>
+          <th>Symbol</th><th>Side</th><th>Vol</th><th>Price</th><th>Profit</th><th>Comment</th>
+        </tr>
+      </thead>
       <tbody></tbody>
     </table>
   </section>
@@ -110,6 +143,16 @@
       <button id="refreshLicenseBtn" class="btn-sm btn-muted">Refresh</button>
     </div>
     <div class="result-box" id="licenseResult"></div>
+
+    <div class="panel-header" style="margin-top:14px">
+      <h2>Backend Logs</h2>
+      <p class="sub">Every run writes a file to the local <code>logs</code> folder.</p>
+    </div>
+    <div class="book-toolbar">
+      <button id="refreshLogsBtn" class="btn-sm btn-muted">Refresh Logs</button>
+      <span id="logsStatus" class="status-text"></span>
+    </div>
+    <div class="result-box" id="logsResult"></div>
   </section>
 
   <script src="/ui/app.js"></script>

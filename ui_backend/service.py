@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 from threading import Lock
@@ -77,6 +77,72 @@ class TradingUIService:
                 }
             )
         return rows
+
+    def get_trusted_time_utc(self) -> datetime | None:
+        """Try to read broker/server time from any configured account."""
+        for account in self._load_accounts():
+            bot = TradingBot(self._make_account_config(self.cfg, account))
+            try:
+                bot.start()
+                snap = bot.client.account_snapshot()
+                ts = snap.time
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                else:
+                    ts = ts.astimezone(timezone.utc)
+                return ts
+            except Exception:
+                continue
+            finally:
+                try:
+                    bot.stop()
+                except Exception:
+                    pass
+        return None
+
+    def search_symbols(
+        self,
+        account_name: str,
+        query: str | None,
+        limit: int = 30,
+    ) -> list[dict[str, Any]]:
+        account = next((a for a in self._load_accounts() if a.name == account_name), None)
+        if account is None:
+            raise ValueError(f"Unknown account: {account_name}")
+        bot = TradingBot(self._make_account_config(self.cfg, account))
+        q = (query or "").strip().lower()
+        max_items = max(1, min(int(limit), 200))
+        try:
+            bot.start()
+            symbols = bot.client.symbols_get()
+        finally:
+            try:
+                bot.stop()
+            except Exception:
+                pass
+
+        matched: list[dict[str, Any]] = []
+        for s in symbols:
+            name = str(s.get("name", "") or "")
+            path = str(s.get("path", "") or "")
+            desc = str(s.get("description", "") or "")
+            hay = f"{name} {path} {desc}".lower()
+            if q and q not in hay:
+                continue
+            matched.append(
+                {
+                    "name": name,
+                    "description": desc,
+                    "path": path,
+                    "visible": bool(s.get("visible", False)),
+                }
+            )
+
+        if q:
+            matched.sort(key=lambda row: (0 if row["name"].lower().startswith(q) else 1, row["name"]))
+        else:
+            matched.sort(key=lambda row: row["name"])
+        return matched[:max_items]
 
     def upsert_account(self, payload: dict[str, Any]) -> dict[str, Any]:
         accounts = self._load_accounts()
@@ -207,6 +273,86 @@ class TradingUIService:
             "total_profit": round(total_profit, 2),
         }
 
+    def get_closed_deals(
+        self,
+        account_name: str | None,
+        days: int = 7,
+        limit: int = 300,
+    ) -> list[dict[str, Any]]:
+        days_safe = max(1, min(int(days), 365))
+        limit_safe = max(1, min(int(limit), 2000))
+        to_dt = datetime.now(timezone.utc)
+        from_dt = to_dt - timedelta(days=days_safe)
+
+        accounts = self._load_accounts()
+        if account_name:
+            accounts = [a for a in accounts if a.name == account_name]
+        if not accounts:
+            return []
+
+        deal_entry_out = int(getattr(mt5, "DEAL_ENTRY_OUT", 1))
+        rows: list[dict[str, Any]] = []
+
+        for account in accounts:
+            bot = TradingBot(self._make_account_config(self.cfg, account))
+            try:
+                bot.start()
+                deals = bot.client.history_deals(date_from=from_dt, date_to=to_dt)
+                for d in deals:
+                    if int(getattr(d, "entry", -1)) != deal_entry_out:
+                        continue
+                    t = int(getattr(d, "time", 0) or 0)
+                    ts = datetime.fromtimestamp(t, tz=timezone.utc).isoformat() if t > 0 else None
+                    side = "buy" if int(getattr(d, "type", -1)) == int(getattr(mt5, "DEAL_TYPE_BUY", 0)) else "sell"
+                    rows.append(
+                        {
+                            "account": account.name,
+                            "login": account.mt5_login,
+                            "deal_ticket": int(getattr(d, "ticket", 0) or 0),
+                            "order_ticket": int(getattr(d, "order", 0) or 0),
+                            "position_id": int(getattr(d, "position_id", 0) or 0),
+                            "symbol": str(getattr(d, "symbol", "") or ""),
+                            "side": side,
+                            "volume": float(getattr(d, "volume", 0.0) or 0.0),
+                            "price": float(getattr(d, "price", 0.0) or 0.0),
+                            "profit": float(getattr(d, "profit", 0.0) or 0.0),
+                            "swap": float(getattr(d, "swap", 0.0) or 0.0),
+                            "commission": float(getattr(d, "commission", 0.0) or 0.0),
+                            "comment": str(getattr(d, "comment", "") or ""),
+                            "executed_at_utc": ts,
+                        }
+                    )
+            finally:
+                try:
+                    bot.stop()
+                except Exception:
+                    pass
+
+        rows.sort(key=lambda r: r.get("executed_at_utc") or "", reverse=True)
+        return rows[:limit_safe]
+
+    def get_log_files(self, limit: int = 20) -> list[dict[str, Any]]:
+        logs_dir = Path("logs")
+        if not logs_dir.exists():
+            return []
+        files = sorted(
+            logs_dir.glob("ui_backend_*.log"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        out: list[dict[str, Any]] = []
+        for p in files[: max(1, min(int(limit), 200))]:
+            st = p.stat()
+            out.append(
+                {
+                    "name": p.name,
+                    "path": str(p.resolve()),
+                    "size_bytes": int(st.st_size),
+                    "modified_at_utc": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                }
+            )
+        return out
+
     def close_positions(
         self,
         account_name: str,
@@ -257,6 +403,33 @@ class TradingUIService:
             "closed_count": len(closed),
             "details": closed,
         }
+
+    def cancel_pending_order(self, account_name: str, ticket: int) -> dict[str, Any]:
+        account = next((a for a in self._load_accounts() if a.name == account_name), None)
+        if account is None:
+            raise ValueError(f"Unknown account: {account_name}")
+
+        bot = TradingBot(self._make_account_config(self.cfg, account))
+        try:
+            bot.start()
+            orders = bot.client.active_orders(ticket=int(ticket))
+            if not orders:
+                raise ValueError(f"Pending order not found for ticket={ticket}")
+            order = orders[0]
+            result = bot.client.cancel_order(int(getattr(order, "ticket", ticket)))
+            return {
+                "account": account_name,
+                "ticket": int(getattr(order, "ticket", ticket)),
+                "symbol": str(getattr(order, "symbol", "") or ""),
+                "retcode": result.get("retcode"),
+                "order": result.get("order"),
+                "comment": result.get("comment"),
+            }
+        finally:
+            try:
+                bot.stop()
+            except Exception:
+                pass
 
     def submit_plan(
         self,
