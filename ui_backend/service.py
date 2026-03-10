@@ -315,8 +315,7 @@ class TradingUIService:
         if not accounts:
             return []
 
-        deal_entry_out = int(getattr(mt5, "DEAL_ENTRY_OUT", 1))
-        deal_entry_out_by = int(getattr(mt5, "DEAL_ENTRY_OUT_BY", 3))
+        deal_entry_in = int(getattr(mt5, "DEAL_ENTRY_IN", 0))
         rows: list[dict[str, Any]] = []
 
         for account in accounts:
@@ -329,10 +328,15 @@ class TradingUIService:
                     # Fallback to full history and filter client-side.
                     deals = bot.client.history_deals()
                 for d in deals:
+                    # Keep all non-entry deals (OUT / OUT_BY / INOUT etc.) to avoid
+                    # missing broker-specific close entry codes.
                     entry = int(getattr(d, "entry", -1))
-                    if entry not in (deal_entry_out, deal_entry_out_by):
+                    if entry == deal_entry_in:
                         continue
                     t = int(getattr(d, "time", 0) or 0)
+                    t_msc = int(getattr(d, "time_msc", 0) or 0)
+                    if t <= 0 and t_msc > 0:
+                        t = int(t_msc // 1000)
                     if t <= 0:
                         continue
                     ts = datetime.fromtimestamp(t, tz=timezone.utc).isoformat() if t > 0 else None

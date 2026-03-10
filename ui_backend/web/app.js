@@ -606,7 +606,7 @@ async function refreshHistory() {
   const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(daysRaw, 365)) : 7;
   $('#historyStatus').textContent = 'Loading...';
   try {
-    const res = await API.closedHistory(account, days, 500);
+    const res = await API.closedHistory(account, days, 2000);
     const tbody = $('#historyTable tbody');
     tbody.innerHTML = '';
     for (const item of (res.items || [])) {
@@ -628,9 +628,11 @@ async function refreshHistory() {
       tbody.appendChild(tr);
     }
     $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows`;
-    renderHistoryMini((res.items || []).slice(0, 50));
+    renderHistoryMini((res.items || []).slice(0, 100));
   } catch (err) {
     $('#historyStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
+    const mini = $('#historyMiniStatus');
+    if (mini) mini.textContent = `Error: ${err.detail || err.message || String(err)}`;
   }
 }
 
@@ -657,6 +659,17 @@ function renderHistoryMini(items) {
   const status = $('#historyMiniStatus');
   if (status) {
     status.textContent = `Rows: ${items.length}, Total P/L: ${total.toFixed(2)}`;
+  }
+}
+
+async function refreshHistoryMiniOnly() {
+  const status = $('#historyMiniStatus');
+  if (status) status.textContent = 'Loading...';
+  try {
+    const res = await API.closedHistory('', 7, 2000);
+    renderHistoryMini((res.items || []).slice(0, 100));
+  } catch (err) {
+    if (status) status.textContent = `Error: ${err.detail || err.message || String(err)}`;
   }
 }
 
@@ -724,7 +737,7 @@ $('#refreshLicenseBtn').addEventListener('click', refreshLicense);
 $('#refreshHistoryBtn').addEventListener('click', refreshHistory);
 $('#refreshLogsBtn').addEventListener('click', refreshLogs);
 const historyMiniBtn = $('#refreshHistoryMiniBtn');
-if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistory);
+if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistoryMiniOnly);
 
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {
@@ -734,5 +747,7 @@ if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistory);
   connectWS();
   createOrderRow();
   refreshHistory();
+  refreshHistoryMiniOnly();
   setInterval(refreshHistory, 15000);
+  setInterval(refreshHistoryMiniOnly, 15000);
 })();
