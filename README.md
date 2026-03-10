@@ -279,18 +279,62 @@ Notes:
 
 `.pyc` alone is not enough for protection. Use executable packaging.
 
-Build Windows executable:
+Important:
+- Build **Windows release on Windows**
+- Build **macOS release on macOS**
+- PyInstaller does not reliably cross-compile between OS families.
+
+### Windows release
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_bundle.ps1
 ```
 
-Output:
-- `dist/Tradingm5UI.exe`
-- distribute only executable/runtime files to end users (no source files)
+For a zipped release bundle:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_release_zip.ps1 -Version v1
+```
 
-Launch helper:
+Outputs:
+- `dist/Tradingm5UI.exe`
+- `release/Tradingm5UI_<version>_<timestamp>.zip`
+
+Launch helper (dev machine):
 ```powershell
 .\scripts\start_ui.bat
+```
+
+### macOS release
+```bash
+chmod +x ./scripts/build_macos_bundle.sh
+./scripts/build_macos_bundle.sh v1
+```
+
+Outputs:
+- `dist/Tradingm5UI` (native macOS binary)
+- `release/Tradingm5UI_<version>_macOS_<timestamp>.zip`
+
+Launch helper:
+```bash
+chmod +x ./scripts/start_ui.command
+./scripts/start_ui.command
+```
+
+Recommended hardening for production distribution:
+- code sign binaries (Windows Authenticode, Apple Developer ID)
+- notarize macOS binary/app before sharing externally
+
+### Automatic release via GitHub (Windows + macOS)
+This repo includes `.github/workflows/release.yml`.
+
+How it works:
+- push a tag like `v1.0.0`
+- GitHub Actions builds Windows and macOS bundles in parallel
+- both zip files are attached to a GitHub Release automatically
+
+Example:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ---

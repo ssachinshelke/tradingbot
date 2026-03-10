@@ -378,15 +378,8 @@ class TradingUIService:
                     orders = bot.client.history_orders(date_from=from_dt, date_to=to_dt)
                     if not orders:
                         orders = bot.client.history_orders()
-                    known_order_ids = {
-                        int(r.get("order_ticket", 0) or 0)
-                        for r in rows
-                        if str(r.get("account", "")) == account.name
-                    }
                     for o in orders:
                         order_ticket = int(getattr(o, "ticket", 0) or 0)
-                        if order_ticket in known_order_ids:
-                            continue
                         setup = int(getattr(o, "time_setup", 0) or 0)
                         done = int(getattr(o, "time_done", 0) or 0)
                         ts_epoch = done if done > 0 else setup
@@ -434,9 +427,9 @@ class TradingUIService:
         seen: set[str] = set()
         for row in sorted(rows, key=lambda r: r.get("executed_at_utc") or "", reverse=True):
             key = (
-                f"{row.get('account','')}|{row.get('deal_ticket',0)}|"
+                f"{row.get('record_kind','')}|{row.get('account','')}|{row.get('deal_ticket',0)}|"
                 f"{row.get('order_ticket',0)}|{row.get('position_id',0)}|"
-                f"{row.get('executed_at_utc','')}"
+                f"{row.get('entry_type','')}|{row.get('executed_at_utc','')}"
             )
             if key in seen:
                 continue
