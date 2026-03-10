@@ -308,7 +308,13 @@ class TradingUIService:
         days_safe = max(1, min(int(days), 365))
         limit_safe = max(1, min(int(limit), 2000))
         to_dt = datetime.now(timezone.utc)
-        from_dt = to_dt - timedelta(days=days_safe)
+        if days_safe == 1:
+            # "Today" should align to local calendar day, not rolling 24h.
+            now_local = datetime.now().astimezone()
+            start_local = datetime(now_local.year, now_local.month, now_local.day, tzinfo=now_local.tzinfo)
+            from_dt = start_local.astimezone(timezone.utc)
+        else:
+            from_dt = to_dt - timedelta(days=days_safe)
         mode_safe = (mode or "closed").strip().lower()
         if mode_safe not in {"closed", "all"}:
             mode_safe = "closed"
@@ -350,6 +356,7 @@ class TradingUIService:
                     side = "buy" if int(getattr(d, "type", -1)) == int(getattr(mt5, "DEAL_TYPE_BUY", 0)) else "sell"
                     rows.append(
                         {
+                            "record_kind": "deal",
                             "account": account.name,
                             "login": account.mt5_login,
                             "deal_ticket": int(getattr(d, "ticket", 0) or 0),
@@ -367,6 +374,49 @@ class TradingUIService:
                             "executed_at_utc": ts,
                         }
                     )
+                if mode_safe == "all":
+                    orders = bot.client.history_orders(date_from=from_dt, date_to=to_dt)
+                    if not orders:
+                        orders = bot.client.history_orders()
+                    known_order_ids = {
+                        int(r.get("order_ticket", 0) or 0)
+                        for r in rows
+                        if str(r.get("account", "")) == account.name
+                    }
+                    for o in orders:
+                        order_ticket = int(getattr(o, "ticket", 0) or 0)
+                        if order_ticket in known_order_ids:
+                            continue
+                        setup = int(getattr(o, "time_setup", 0) or 0)
+                        done = int(getattr(o, "time_done", 0) or 0)
+                        ts_epoch = done if done > 0 else setup
+                        if ts_epoch <= 0:
+                            continue
+                        when = datetime.fromtimestamp(ts_epoch, tz=timezone.utc)
+                        if when < from_dt:
+                            continue
+                        order_type = int(getattr(o, "type", -1) or -1)
+                        side = "buy" if order_type in {0, 2, 4, 6} else "sell"
+                        rows.append(
+                            {
+                                "record_kind": "order",
+                                "account": account.name,
+                                "login": account.mt5_login,
+                                "deal_ticket": 0,
+                                "order_ticket": order_ticket,
+                                "position_id": int(getattr(o, "position_id", 0) or 0),
+                                "symbol": str(getattr(o, "symbol", "") or ""),
+                                "side": side,
+                                "volume": float(getattr(o, "volume_initial", 0.0) or 0.0),
+                                "price": float(getattr(o, "price_open", 0.0) or 0.0),
+                                "profit": 0.0,
+                                "swap": 0.0,
+                                "commission": 0.0,
+                                "comment": str(getattr(o, "comment", "") or ""),
+                                "entry_type": -1,
+                                "executed_at_utc": when.isoformat(),
+                            }
+                        )
             finally:
                 try:
                     bot.stop()

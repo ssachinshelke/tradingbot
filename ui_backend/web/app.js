@@ -615,9 +615,12 @@ async function refreshHistory() {
       const tr = document.createElement('tr');
       const profit = Number(item.profit || 0);
       const entryType = Number(item.entry_type);
-      const entryLabel = Number.isFinite(entryType)
-        ? (entryType === 0 ? 'IN' : (entryType === 1 ? 'OUT' : (entryType === 2 ? 'INOUT' : (entryType === 3 ? 'OUT_BY' : String(entryType)))))
-        : '';
+      const isOrderRecord = String(item.record_kind || '') === 'order';
+      const entryLabel = isOrderRecord
+        ? 'ORDER'
+        : (Number.isFinite(entryType)
+          ? (entryType === 0 ? 'IN' : (entryType === 1 ? 'OUT' : (entryType === 2 ? 'INOUT' : (entryType === 3 ? 'OUT_BY' : String(entryType)))))
+          : '');
       tr.innerHTML = `
         <td>${item.executed_at_utc || ''}</td>
         <td>${esc(item.account)}</td>
@@ -651,12 +654,13 @@ function renderHistoryMini(items) {
   for (const item of items) {
     const profit = Number(item.profit || 0);
     total += profit;
+    const isOrderRecord = String(item.record_kind || '') === 'order';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${item.executed_at_utc || ''}</td>
       <td>${esc(item.account)}</td>
       <td>${esc(item.symbol)}</td>
-      <td>${item.side}</td>
+      <td>${isOrderRecord ? `${item.side} (order)` : item.side}</td>
       <td>${item.volume}</td>
       <td>${item.price}</td>
       <td class="${profitClass(profit)}">${profit.toFixed(2)}</td>
@@ -673,7 +677,7 @@ async function refreshHistoryMiniOnly() {
   const status = $('#historyMiniStatus');
   if (status) status.textContent = 'Loading...';
   try {
-    const res = await API.closedHistory('', 7, 2000, 'closed');
+    const res = await API.closedHistory('', 1, 2000, 'all');
     renderHistoryMini((res.items || []).slice(0, 100));
   } catch (err) {
     if (status) status.textContent = `Error: ${err.detail || err.message || String(err)}`;
