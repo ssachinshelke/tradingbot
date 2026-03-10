@@ -10,6 +10,7 @@ from typing import Any
 import webbrowser
 
 import uvicorn
+from ui_backend.server import app
 
 
 def _build_log_config(log_file: Path) -> dict[str, Any]:
@@ -70,7 +71,7 @@ def main() -> None:
     threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
     uvicorn.run(
-        "ui_backend.server:app",
+        app,
         host="127.0.0.1",
         port=8787,
         reload=False,

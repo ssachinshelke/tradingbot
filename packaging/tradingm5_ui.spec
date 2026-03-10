@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
 # In PyInstaller spec execution, __file__ may be unset on some CI runners.
 # Use cwd from build scripts and absolute script path so PyInstaller does not
@@ -24,6 +25,8 @@ hiddenimports = [
     "fastapi",
     "starlette",
 ]
+hiddenimports += collect_submodules("ui_backend")
+hiddenimports += collect_submodules("mt5_bot")
 
 
 a = Analysis(
