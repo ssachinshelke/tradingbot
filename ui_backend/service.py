@@ -313,6 +313,7 @@ class TradingUIService:
             return []
 
         deal_entry_out = int(getattr(mt5, "DEAL_ENTRY_OUT", 1))
+        deal_entry_out_by = int(getattr(mt5, "DEAL_ENTRY_OUT_BY", 3))
         rows: list[dict[str, Any]] = []
 
         for account in accounts:
@@ -320,11 +321,21 @@ class TradingUIService:
             try:
                 bot.start()
                 deals = bot.client.history_deals(date_from=from_dt, date_to=to_dt)
+                if not deals:
+                    # Some terminals/brokers may not return recent-window records reliably.
+                    # Fallback to full history and filter client-side.
+                    deals = bot.client.history_deals()
                 for d in deals:
-                    if int(getattr(d, "entry", -1)) != deal_entry_out:
+                    entry = int(getattr(d, "entry", -1))
+                    if entry not in (deal_entry_out, deal_entry_out_by):
                         continue
                     t = int(getattr(d, "time", 0) or 0)
+                    if t <= 0:
+                        continue
                     ts = datetime.fromtimestamp(t, tz=timezone.utc).isoformat() if t > 0 else None
+                    when = datetime.fromtimestamp(t, tz=timezone.utc)
+                    if when < from_dt:
+                        continue
                     side = "buy" if int(getattr(d, "type", -1)) == int(getattr(mt5, "DEAL_TYPE_BUY", 0)) else "sell"
                     rows.append(
                         {

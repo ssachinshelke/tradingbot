@@ -444,6 +444,7 @@ $('#positionsTable').addEventListener('click', async e => {
   try {
     const res = await API.closeOrder(account, symbol, side, ticket);
     $('#closeStatus').textContent = `Closed ${res.closed_count} position(s)`;
+    refreshHistory();
   } catch (err) {
     $('#closeStatus').textContent = 'Close failed: ' + (err.detail || err.message || '');
   }
@@ -486,6 +487,7 @@ $('#closeSelectedBtn').addEventListener('click', async function () {
   }
   state.closingSet.clear();
   $('#closeStatus').textContent = `Closed ${totalClosed} position(s)` + (errors ? `, ${errors} failed` : '');
+  refreshHistory();
   done();
 });
 
@@ -527,6 +529,7 @@ $('#closeAllBtn').addEventListener('click', async function () {
   }
   state.closingSet.clear();
   $('#closeStatus').textContent = `Closed ${totalClosed} position(s)` + (errors ? `, ${errors} failed` : '');
+  refreshHistory();
   done();
 });
 
@@ -539,6 +542,7 @@ $('#ordersTable').addEventListener('click', async e => {
   try {
     await API.cancelPendingOrder(account, ticket);
     $('#pendingStatus').textContent = `Cancelled pending #${ticket}`;
+    refreshHistory();
   } catch (err) {
     $('#pendingStatus').textContent = 'Cancel failed: ' + (err.detail || err.message || '');
   }
@@ -565,6 +569,7 @@ $('#cancelSelectedPendingBtn').addEventListener('click', async function () {
   );
   const errors = results.filter(r => r.error).length;
   $('#pendingStatus').textContent = `Cancelled ${results.length - errors} pending order(s)` + (errors ? `, ${errors} failed` : '');
+  refreshHistory();
   done();
 });
 
@@ -591,6 +596,7 @@ $('#cancelAllPendingBtn').addEventListener('click', async function () {
   );
   const errors = results.filter(r => r.error).length;
   $('#pendingStatus').textContent = `Cancelled ${results.length - errors} pending order(s)` + (errors ? `, ${errors} failed` : '');
+  refreshHistory();
   done();
 });
 
@@ -728,4 +734,5 @@ if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistory);
   connectWS();
   createOrderRow();
   refreshHistory();
+  setInterval(refreshHistory, 15000);
 })();
