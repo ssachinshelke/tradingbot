@@ -58,6 +58,8 @@ This section is for binary users (no source code access needed).
 ### Windows user guide (end-to-end)
 1. Download release zip and extract.
 2. Double-click `Tradingm5UI.exe`.
+   - Browser should auto-open to `http://127.0.0.1:8787`.
+   - If it does not, open that URL manually.
 3. In `Accounts` tab:
    - Add Account 1 and Account 2.
    - Run `Healthcheck All` and confirm both are OK.

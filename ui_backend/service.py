@@ -39,7 +39,7 @@ def _order_type_name(order_type: int) -> str:
 
 class TradingUIService:
     def __init__(self) -> None:
-        self.cfg: BotConfig = load_config()
+        self.cfg: BotConfig = self._load_config_for_ui()
         self._accounts_file = Path(self.cfg.accounts_file)
         self._req_lock = Lock()
         self._journal_lock = Lock()
@@ -47,6 +47,55 @@ class TradingUIService:
         self._closed_journal_path = Path("logs") / "closed_deals_journal.jsonl"
         self._closed_journal_path.parent.mkdir(parents=True, exist_ok=True)
         self._max_ui_accounts = max(1, int(os.getenv("UI_MAX_ACCOUNTS", "4") or "4"))
+
+    @staticmethod
+    def _load_config_for_ui() -> BotConfig:
+        """UI should still boot even when .env MT5 credentials are absent."""
+        try:
+            return load_config()
+        except Exception:
+            return BotConfig(
+                mt5_login=0,
+                mt5_password="",
+                mt5_server="",
+                mt5_path=os.getenv("MT5_PATH", "").strip() or None,
+                mt5_portable=os.getenv("MT5_PORTABLE", "false").strip().lower() in ("1", "true", "yes"),
+                default_symbol=os.getenv("DEFAULT_SYMBOL", "EURUSD"),
+                risk_per_trade=float(os.getenv("RISK_PER_TRADE", "0.01")),
+                max_daily_loss_pct=float(os.getenv("MAX_DAILY_LOSS_PCT", "0.03")),
+                max_open_trades=int(os.getenv("MAX_OPEN_TRADES", "3")),
+                sl_pips=float(os.getenv("SL_PIPS", "25")),
+                tp_pips=float(os.getenv("TP_PIPS", "50")),
+                deviation=int(os.getenv("DEVIATION", "20")),
+                magic_number=int(os.getenv("MAGIC_NUMBER", "20260302")),
+                timeframe=os.getenv("TIMEFRAME", "M5").strip().upper(),
+                fast_ma=int(os.getenv("FAST_MA", "20")),
+                slow_ma=int(os.getenv("SLOW_MA", "50")),
+                poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "15")),
+                cooldown_seconds=int(os.getenv("COOLDOWN_SECONDS", "60")),
+                max_spread_pips=float(os.getenv("MAX_SPREAD_PIPS", "2.5")),
+                enable_session_filter=os.getenv("ENABLE_SESSION_FILTER", "false").strip().lower() in ("1", "true", "yes"),
+                session_start_utc=os.getenv("SESSION_START_UTC", "06:00"),
+                session_end_utc=os.getenv("SESSION_END_UTC", "20:00"),
+                journal_path=os.getenv("JOURNAL_PATH", "trade_journal.csv"),
+                max_connect_retries=int(os.getenv("MAX_CONNECT_RETRIES", "5")),
+                max_symbol_open_trades=int(os.getenv("MAX_SYMBOL_OPEN_TRADES", "2")),
+                max_symbol_volume=float(os.getenv("MAX_SYMBOL_VOLUME", "2.0")),
+                enable_break_even=os.getenv("ENABLE_BREAK_EVEN", "true").strip().lower() in ("1", "true", "yes"),
+                break_even_trigger_pips=float(os.getenv("BREAK_EVEN_TRIGGER_PIPS", "10")),
+                break_even_offset_pips=float(os.getenv("BREAK_EVEN_OFFSET_PIPS", "1")),
+                enable_trailing_stop=os.getenv("ENABLE_TRAILING_STOP", "true").strip().lower() in ("1", "true", "yes"),
+                trailing_start_pips=float(os.getenv("TRAILING_START_PIPS", "15")),
+                trailing_distance_pips=float(os.getenv("TRAILING_DISTANCE_PIPS", "10")),
+                enable_partial_tp=os.getenv("ENABLE_PARTIAL_TP", "true").strip().lower() in ("1", "true", "yes"),
+                partial_tp_trigger_pips=float(os.getenv("PARTIAL_TP_TRIGGER_PIPS", "20")),
+                partial_tp_close_pct=float(os.getenv("PARTIAL_TP_CLOSE_PCT", "0.5")),
+                accounts_file=os.getenv("ACCOUNTS_FILE", "accounts.json"),
+                dispatch_journal_path=os.getenv("DISPATCH_JOURNAL_PATH", "dispatch_journal.csv"),
+                sync_send_delay_ms=int(os.getenv("SYNC_SEND_DELAY_MS", "300")),
+                strategy_name=os.getenv("STRATEGY_NAME", "ma_cross").strip(),
+                strategy_class_path=os.getenv("STRATEGY_CLASS_PATH", "").strip() or None,
+            )
 
     def _load_accounts(self) -> list[AccountConfig]:
         return load_accounts(str(self._accounts_file))

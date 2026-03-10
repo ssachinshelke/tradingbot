@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 import logging.config
 from pathlib import Path
+import threading
 from typing import Any
+import webbrowser
 
 import uvicorn
 
@@ -63,6 +65,9 @@ def main() -> None:
     logs_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = logs_dir / f"ui_backend_{ts}.log"
+    url = "http://127.0.0.1:8787"
+    # Open browser shortly after startup so users can see UI immediately.
+    threading.Timer(1.0, lambda: webbrowser.open(url)).start()
 
     uvicorn.run(
         "ui_backend.server:app",
