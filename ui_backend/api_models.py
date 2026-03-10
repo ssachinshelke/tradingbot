@@ -19,14 +19,14 @@ class AccountPayload(BaseModel):
     mt5_password: str
     mt5_server: str
     mt5_path: str | None = None
-    mt5_portable: bool = False
+    mt5_portable: bool = True
 
 
 class PortableCreateRequest(BaseModel):
     source_dir: str
     target_root: str | None = None
-    names_csv: str
-    append_accounts: bool = False
+    names_csv: str = "acc1,acc2,acc3,acc4"
+    append_accounts: bool = True
 
 
 class PortableCreateResponse(ApiResponse):

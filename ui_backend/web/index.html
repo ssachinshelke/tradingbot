@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260310-9">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310-14">
 </head>
 <body>
   <header class="topbar">
@@ -41,7 +41,7 @@
       <div class="sub">Tip: use the row-level Find button to search valid symbols for that account.</div>
       <div id="orderRows" class="order-rows"></div>
     </div>
-    <div class="result-box" id="tradingResult"></div>
+    <div class="sub" id="tradingStatus"></div>
 
     <div class="panel-header" style="margin-top:12px">
       <h3>Preflight</h3>
@@ -51,7 +51,7 @@
       <button id="runPreflightBtn" class="btn-sm btn-accent">Run Preflight</button>
       <span id="preflightBadge" class="status-text">Status: unknown</span>
     </div>
-    <div class="result-box" id="preflightResult"></div>
+    <div class="sub" id="preflightStatus"></div>
 
     <p class="sub">Advanced JSON plan is available via API endpoint: <code>/api/trade/submit-plan</code></p>
   </section>
@@ -63,16 +63,18 @@
       <p class="sub" id="accountLimitHint">Max 4 accounts allowed for low-latency execution.</p>
       <p class="sub">Recommended flow: (1) Auto-create portable folders, (2) fill <code>account.json</code>, (3) Import Accounts.</p>
     </div>
-    <form id="accountForm" class="acc-form">
-      <input name="name" placeholder="account name (optional)">
-      <input name="mt5_login" placeholder="login (number)" type="number" required>
-      <input name="mt5_password" placeholder="password" type="password" required>
-      <input name="mt5_server" placeholder="broker server" value="MetaQuotes-Demo" required>
-      <input name="mt5_path" placeholder="terminal64.exe path (auto-detected when possible)">
-      <label class="cb-label"><input name="mt5_portable" type="checkbox"> portable</label>
-      <button type="submit" class="btn-sm btn-accent">Save Account</button>
+
+    <div class="panel-header" style="margin-top:10px">
+      <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
+      <p class="sub">Creates 4 portable copies automatically in local <code>mt5-portable</code> folder and updates <code>account.json</code>.</p>
+    </div>
+    <form id="portableForm" class="acc-form">
+      <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
+      <button type="submit" class="btn-sm btn-accent">Create 4 Portable Folders</button>
     </form>
-    <div class="sub" id="accountLimitStatus"></div>
+    <div class="sub" id="portableHint"></div>
+    <div class="sub" id="portableStatus"></div>
+
     <div class="panel-header" style="margin-top:10px">
       <h3>Import Accounts JSON</h3>
       <p class="sub">Load all accounts from a local JSON file (default: <code>account.json</code>).</p>
@@ -81,21 +83,20 @@
       <input name="file_path" placeholder="account.json" value="account.json">
       <button type="submit" class="btn-sm btn-accent">Import Accounts</button>
     </form>
-    <div class="result-box" id="accountImportResult"></div>
+    <div class="sub" id="accountImportStatus"></div>
 
     <div class="panel-header" style="margin-top:12px">
-      <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
-      <p class="sub">Creates folder copies and optional account stubs from one source terminal.</p>
+      <h3>Manage Accounts</h3>
     </div>
-    <form id="portableForm" class="acc-form">
-      <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
-      <input name="target_root" placeholder="target root (optional, default mt5-portable)">
-      <input name="names_csv" placeholder="copy names (comma-separated: acc1,acc2)" required>
-      <label class="cb-label"><input name="append_accounts" type="checkbox"> append account stubs</label>
-      <button type="submit" class="btn-sm btn-accent">Create Portable Folders</button>
+    <form id="accountForm" class="acc-form">
+      <input name="name" placeholder="account name (optional)">
+      <input name="mt5_login" placeholder="login (number)" type="number" required>
+      <input name="mt5_password" placeholder="password" type="password" required>
+      <input name="mt5_server" placeholder="broker server" value="MetaQuotes-Demo" required>
+      <input name="mt5_path" placeholder="terminal64.exe path (auto-detected when possible)">
+      <button type="submit" class="btn-sm btn-accent">Save Account</button>
     </form>
-    <div class="sub" id="portableHint"></div>
-    <div class="result-box" id="portableResult"></div>
+    <div class="sub" id="accountLimitStatus"></div>
     <div class="acc-toolbar">
       <button id="healthcheckAllBtn" class="btn-sm btn-green">Healthcheck All</button>
       <span id="healthStatus" class="status-text"></span>
@@ -204,6 +205,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-12"></script>
+  <script src="/ui/app.js?v=20260310-14"></script>
 </body>
 </html>

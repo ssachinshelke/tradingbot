@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +92,7 @@ class WebSocketHub:
 service = TradingUIService()
 license_manager = LicenseManager(trusted_time_provider=service.get_trusted_time_utc)
 hub = WebSocketHub()
+logger = logging.getLogger("uvicorn.error")
 
 
 @asynccontextmanager
@@ -182,7 +184,9 @@ async def create_portable_accounts(req: PortableCreateRequest) -> PortableCreate
     except asyncio.CancelledError as exc:
         raise HTTPException(status_code=503, detail="Server shutting down") from exc
     except Exception as exc:
+        logger.exception("create-portable failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info("create-portable success: created=%s target=%s", out.get("created_count"), out.get("target_root"))
     return PortableCreateResponse(ok=True, **out)
 
 
@@ -193,7 +197,14 @@ async def import_accounts_file(req: AccountImportRequest) -> AccountImportRespon
     except asyncio.CancelledError as exc:
         raise HTTPException(status_code=503, detail="Server shutting down") from exc
     except Exception as exc:
+        logger.exception("import-accounts failed: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "import-accounts success: imported=%s skipped=%s file=%s",
+        out.get("imported_count"),
+        out.get("skipped_count"),
+        out.get("file_path"),
+    )
     return AccountImportResponse(ok=True, **out)
 
 

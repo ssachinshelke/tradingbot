@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -16,6 +17,8 @@ from mt5_bot import mt5
 from mt5_bot.advanced_plan import execute_advanced_order_plan, parse_advanced_order_rows
 from mt5_bot.client import TradingBot
 from mt5_bot.config import AccountConfig, BotConfig, load_config
+
+logger = logging.getLogger("uvicorn.error")
 
 
 def _now_iso() -> str:
@@ -351,7 +354,7 @@ class TradingUIService:
         source_dir: str,
         names_csv: str,
         target_root: str | None,
-        append_accounts: bool = False,
+        append_accounts: bool = True,
     ) -> dict[str, Any]:
         if os.name != "nt":
             raise ValueError("Auto-create portable MT5 folders is currently supported on Windows only.")
@@ -362,6 +365,8 @@ class TradingUIService:
         root = Path(target_root.strip()) if target_root and str(target_root).strip() else Path("mt5-portable")
         root.mkdir(parents=True, exist_ok=True)
         names = [n.strip() for n in (names_csv or "").split(",") if n.strip()]
+        if not names:
+            names = ["acc1", "acc2", "acc3", "acc4"]
         if not names:
             raise ValueError("Provide at least one copy name (comma-separated).")
 
@@ -772,13 +777,26 @@ class TradingUIService:
             license_status if lic_ok else (license_error or f"License state: {license_status}"),
         )
 
-        accounts = self._load_accounts()
-        count_ok = 1 <= len(accounts) <= self._max_ui_accounts
+        accounts: list[AccountConfig] = []
+        accounts_load_ok = True
+        accounts_load_error = ""
+        try:
+            accounts = self._load_accounts()
+        except Exception as exc:
+            accounts_load_ok = False
+            accounts_load_error = str(exc)
+            logger.exception("Preflight accounts load failed: %s", exc)
+
+        count_ok = accounts_load_ok and (1 <= len(accounts) <= self._max_ui_accounts)
         add_check(
             "accounts_count",
             "Accounts configured",
             count_ok,
-            f"{len(accounts)} configured (limit {self._max_ui_accounts})",
+            (
+                f"{len(accounts)} configured (limit {self._max_ui_accounts})"
+                if accounts_load_ok
+                else f"Could not parse accounts file: {accounts_load_error}"
+            ),
         )
 
         # MT5 module/runtime sanity.
@@ -826,7 +844,7 @@ class TradingUIService:
         add_check("logs_write", "Log write access", logs_ok, logs_msg)
 
         # Broker/account reachability check.
-        if accounts:
+        if accounts_load_ok and accounts:
             try:
                 results = self.run_healthcheck(None, self.cfg.default_symbol)
                 ok_count = sum(1 for r in results if r.get("ok"))
@@ -838,6 +856,8 @@ class TradingUIService:
                 )
             except Exception as exc:
                 add_check("healthcheck", "Account healthcheck", False, str(exc))
+        elif not accounts_load_ok:
+            add_check("healthcheck", "Account healthcheck", False, "Skipped due to accounts file parse error")
         else:
             add_check("healthcheck", "Account healthcheck", False, "No accounts configured")
 

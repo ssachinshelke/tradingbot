@@ -5,9 +5,22 @@
 // ── API layer ──────────────────────────────────────────────
 const API = {
   MAX_ACCOUNTS: 4,
-  _json(r) {
-    if (!r.ok) return r.json().then(d => { throw d; });
-    return r.json();
+  async _json(r) {
+    const text = await r.text();
+    let data = null;
+    if (text && text.trim()) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
+    if (!r.ok) {
+      if (data !== null) throw data;
+      throw { ok: false, error: text || `HTTP ${r.status}`, status_code: r.status };
+    }
+    if (data !== null) return data;
+    return { ok: true, message: text || '' };
   },
   get(url)       { return fetch(url).then(this._json); },
   post(url, body){ return fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(this._json); },
@@ -67,6 +80,7 @@ const state = {
   orderRowId: 0,
   closingSet: new Set(),
 };
+const DEFAULT_PORTABLE_NAMES = ['acc1', 'acc2', 'acc3', 'acc4'];
 
 // ── Helpers ────────────────────────────────────────────────
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -98,24 +112,13 @@ function renderPreflightResult(res) {
     badge.style.color = res.ready_to_trade ? 'var(--green)' : 'var(--red)';
   }
   const summary = res.summary || {};
-  const rows = checks.map(c => ({
-    code: c.code,
-    ok: c.ok,
-    severity: c.severity,
-    message: c.message,
-  }));
-  setResult('preflightResult', {
-    checked_at_utc: res.checked_at_utc,
-    status: res.status,
-    ready_to_trade: !!res.ready_to_trade,
-    summary: {
-      pass: Number(summary.pass || 0),
-      fail: Number(summary.fail || 0),
-      warn: Number(summary.warn || 0),
-      total: Number(summary.total || 0),
-    },
-    checks: rows,
-  });
+  const firstIssue = checks.find(c => !c.ok);
+  const statusEl = $('#preflightStatus');
+  if (statusEl) {
+    statusEl.textContent =
+      `Checks: pass=${Number(summary.pass || 0)}, fail=${Number(summary.fail || 0)}, warn=${Number(summary.warn || 0)}`
+      + (firstIssue ? ` | ${firstIssue.message}` : '');
+  }
 }
 
 // ── Tab switching ──────────────────────────────────────────
@@ -210,7 +213,7 @@ $('#accountForm').addEventListener('submit', async e => {
     mt5_password: String(f.get('mt5_password')),
     mt5_server: String(f.get('mt5_server')).trim(),
     mt5_path: String(f.get('mt5_path') || '').trim() || null,
-    mt5_portable: f.get('mt5_portable') === 'on',
+    mt5_portable: true,
   };
   if (!payload.name) {
     alert('Please enter account name or valid login.');
@@ -236,10 +239,14 @@ $('#accountImportForm').addEventListener('submit', async e => {
   const done = showSpinner(submitBtn);
   try {
     const out = await API.importAccounts(filePath);
-    setResult('accountImportResult', out);
+    setText(
+      'accountImportStatus',
+      `Imported ${out.imported_count || 0} account(s)`
+      + ((out.skipped_count || 0) > 0 ? `, skipped ${out.skipped_count} template/incomplete row(s)` : '')
+    );
     await loadAccounts();
   } catch (err) {
-    setResult('accountImportResult', { ok: false, error: err.detail || err.message || String(err) });
+    setText('accountImportStatus', err.detail || err.error || err.message || String(err));
   }
   done();
 });
@@ -247,24 +254,25 @@ $('#accountImportForm').addEventListener('submit', async e => {
 $('#portableForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target);
+  const sourceDir = String(f.get('source_dir') || '').trim();
   const payload = {
-    source_dir: String(f.get('source_dir') || '').trim(),
-    target_root: String(f.get('target_root') || '').trim() || null,
-    names_csv: String(f.get('names_csv') || '').trim(),
-    append_accounts: f.get('append_accounts') === 'on',
+    source_dir: sourceDir,
+    target_root: null,
+    names_csv: DEFAULT_PORTABLE_NAMES.join(','),
+    append_accounts: true,
   };
-  if (!payload.source_dir || !payload.names_csv) {
-    setResult('portableResult', { ok: false, error: 'source_dir and names_csv are required.' });
+  if (!payload.source_dir) {
+    setText('portableStatus', 'source_dir is required.');
     return;
   }
   const submitBtn = e.target.querySelector('button[type="submit"]');
   const done = showSpinner(submitBtn);
   try {
     const out = await API.createPortable(payload);
-    setResult('portableResult', out);
+    setText('portableStatus', `Created ${out.created_count || 0} portable folder(s): ${DEFAULT_PORTABLE_NAMES.join(', ')}.`);
     await loadAccounts();
   } catch (err) {
-    setResult('portableResult', { ok: false, error: err.detail || err.message || String(err) });
+    setText('portableStatus', err.detail || err.error || err.message || String(err));
   }
   done();
 });
@@ -352,7 +360,7 @@ function createOrderRow() {
 }
 
 $('#addOrderRowBtn').addEventListener('click', () => createOrderRow());
-$('#clearOrderRowsBtn').addEventListener('click', () => { $('#orderRows').innerHTML = ''; setResult('tradingResult', ''); });
+$('#clearOrderRowsBtn').addEventListener('click', () => { $('#orderRows').innerHTML = ''; setText('tradingStatus', ''); });
 $('#orderRows').addEventListener('click', e => {
   if (e.target.closest('.remove-row-btn')) {
     e.target.closest('.order-row').remove();
@@ -365,7 +373,7 @@ $('#orderRows').addEventListener('click', e => {
     const account = row.querySelector('[data-field="account"]')?.value?.trim();
     const symbolInput = row.querySelector('[data-field="symbol"]');
     if (!account) {
-      setResult('tradingResult', { ok: false, error: 'Select account first, then use Find for symbols.' });
+      setText('tradingStatus', 'Select account first, then use Find for symbols.');
       return;
     }
     const q = symbolInput?.value?.trim() || '';
@@ -383,18 +391,13 @@ $('#orderRows').addEventListener('click', e => {
         }
         const count = (res.items || []).length;
         if (count === 0) {
-          setResult('tradingResult', {
-            ok: false,
-            account,
-            query: q,
-            error: 'No symbols found. Use exact broker symbol name (e.g. EURUSD / EURUSDm / XAUUSD).',
-          });
+          setText('tradingStatus', `No symbols found for ${account}. Use exact broker symbol name.`);
           return;
         }
-        setResult('tradingResult', { ok: true, account, symbols_found: count, query: q });
+        setText('tradingStatus', `Found ${count} symbols for ${account}.`);
       })
       .catch((err) => {
-        setResult('tradingResult', { ok: false, error: err.detail || err.message || String(err) });
+        setText('tradingStatus', err.detail || err.error || err.message || String(err));
       })
       .finally(done);
   }
@@ -428,9 +431,9 @@ function collectOrderRows() {
 
 $('#submitAllOrdersBtn').addEventListener('click', async function () {
   const rows = collectOrderRows();
-  if (!rows.length) { setResult('tradingResult', 'Add at least one valid order row.'); return; }
+  if (!rows.length) { setText('tradingStatus', 'Add at least one valid order row.'); return; }
   const done = showSpinner(this);
-  setResult('tradingResult', 'Validating symbols...');
+  setText('tradingStatus', 'Validating symbols...');
   try {
     const validations = await Promise.all(
       rows.map(r =>
@@ -444,16 +447,19 @@ $('#submitAllOrdersBtn').addEventListener('click', async function () {
     );
     const invalid = validations.filter(v => !v.ok);
     if (invalid.length > 0) {
-      setResult('tradingResult', { ok: false, error: 'Invalid symbols found', invalid });
+      const first = invalid[0];
+      setText('tradingStatus', `Invalid symbol ${first.symbol} for ${first.account}: ${first.error || 'validation failed'}`);
       done();
       return;
     }
 
-    setResult('tradingResult', 'Submitting orders in parallel...');
+    setText('tradingStatus', 'Submitting orders in parallel...');
     const res = await API.submitPlan(rows);
-    setResult('tradingResult', res);
+    const okCount = (res.results || []).filter(r => r.ok).length;
+    const total = (res.results || []).length;
+    setText('tradingStatus', `Submitted. Success: ${okCount}/${total}`);
   } catch (err) {
-    setResult('tradingResult', { error: err.detail || err.message || JSON.stringify(err) });
+    setText('tradingStatus', err.detail || err.error || err.message || String(err));
   }
   done();
 });
@@ -473,7 +479,7 @@ $('#runPreflightBtn').addEventListener('click', async function () {
       badge.textContent = 'Status: ERROR';
       badge.style.color = 'var(--red)';
     }
-    setResult('preflightResult', { ok: false, error: err.detail || err.message || String(err) });
+    setText('preflightStatus', err.detail || err.error || err.message || String(err));
   }
   done();
 });
