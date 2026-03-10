@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 from multiprocessing import Process, Queue
+import queue as _queue_mod
 import time
 from typing import Any
 
@@ -642,7 +643,7 @@ def execute_advanced_order_plan(
             continue
         grouped.setdefault(wf.account, []).append((row_index, wf))
 
-    queue: Queue = Queue()
+    result_queue: Queue = Queue()
     processes: list[Process] = []
     expected = 0
     for account_name, account_workflows in grouped.items():
@@ -655,7 +656,7 @@ def execute_advanced_order_plan(
                 account_workflows,
                 timeout_seconds,
                 poll_seconds,
-                queue,
+                result_queue,
             ),
         )
         p.daemon = True
@@ -663,15 +664,40 @@ def execute_advanced_order_plan(
         processes.append(p)
         expected += len(account_workflows)
 
-    for _ in range(expected):
-        item = queue.get()
-        results.append(item)
+    per_item_timeout = max(timeout_seconds + 60, 120)
+    collected = 0
+    while collected < expected:
+        try:
+            item = result_queue.get(timeout=per_item_timeout)
+            results.append(item)
+            collected += 1
+        except _queue_mod.Empty:
+            break
 
     for proc in processes:
-        proc.join(timeout=10)
+        proc.join(timeout=5)
         if proc.is_alive():
             proc.terminate()
             proc.join(timeout=2)
+
+    if collected < expected:
+        for row_index, wf in indexed_workflows:
+            found = any(r.get("row_index") == row_index for r in results)
+            if not found:
+                results.append(
+                    {
+                        "ok": False,
+                        "name": wf.account,
+                        "login": account_lookup.get(wf.account, None)
+                        and account_lookup[wf.account].mt5_login,
+                        "symbol": wf.symbol,
+                        "started_at_utc": _now_utc_iso(),
+                        "finished_at_utc": _now_utc_iso(),
+                        "steps": [],
+                        "row_index": row_index,
+                        "error": "Worker process timed out or crashed",
+                    }
+                )
 
     results.sort(key=lambda x: int(x.get("row_index", 0)))
     for item in results:

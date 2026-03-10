@@ -80,9 +80,15 @@
       <div class="pnl-display">Floating P/L: <strong id="totalProfit">0.00</strong></div>
     </div>
 
+    <div class="book-toolbar">
+      <button id="closeSelectedBtn" class="btn-sm btn-red" disabled>Close Selected</button>
+      <button id="closeAllBtn" class="btn-sm btn-red">Close All Positions</button>
+      <span id="closeStatus" class="status-text"></span>
+    </div>
+
     <h3>Open Positions</h3>
     <table id="positionsTable" class="tbl">
-      <thead><tr><th>Account</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Open</th><th>P/L</th><th>SL</th><th>TP</th><th></th></tr></thead>
+      <thead><tr><th><input type="checkbox" id="selectAllPos"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Open</th><th>P/L</th><th>SL</th><th>TP</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
 

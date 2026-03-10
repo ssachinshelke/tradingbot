@@ -89,6 +89,9 @@ textarea { width: 100%; resize: vertical; font-family: 'Consolas', 'Monaco', mon
 /* ── pnl display ────────────────────────── */
 .pnl-display { margin-top: 4px; font-size: 14px; }
 
+/* ── book toolbar ───────────────────────── */
+.book-toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; }
+
 /* ── advanced json toggle ───────────────── */
 .advanced-json { margin-top: 16px; }
 .advanced-json summary { cursor: pointer; color: var(--text-dim); font-size: 12px; }
