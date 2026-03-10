@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
+from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
@@ -75,18 +76,11 @@ service = TradingUIService()
 license_manager = LicenseManager()
 hub = WebSocketHub()
 
-app = FastAPI(title="Tradingm5 Local UI API", version="1.0.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Startup: launch realtime broadcast loop. Shutdown: cancel it and drain the thread pool."""
 
-@app.on_event("startup")
-async def startup_event() -> None:
     async def realtime_loop() -> None:
         while True:
             try:
@@ -98,26 +92,43 @@ async def startup_event() -> None:
                         "data": snapshot,
                     }
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-                await hub.broadcast(
-                    {
-                        "type": "error",
-                        "timestamp_utc": _iso_now(),
-                        "data": {"error": str(exc)},
-                    }
-                )
+                try:
+                    await hub.broadcast(
+                        {
+                            "type": "error",
+                            "timestamp_utc": _iso_now(),
+                            "data": {"error": str(exc)},
+                        }
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    pass
             await asyncio.sleep(1.0)
 
-    app.state.realtime_task = asyncio.create_task(realtime_loop())
-
-
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    task = getattr(app.state, "realtime_task", None)
-    if task:
+    task = asyncio.create_task(realtime_loop())
+    try:
+        yield
+    finally:
         task.cancel()
-        with contextlib.suppress(Exception):
+        try:
             await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        _pool.shutdown(wait=False)
+
+
+app = FastAPI(title="Tradingm5 Local UI API", version="1.0.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/system/ping", response_model=ApiResponse)
