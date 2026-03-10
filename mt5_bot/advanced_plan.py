@@ -99,9 +99,7 @@ def _parse_step(raw: dict[str, Any], field_name: str) -> StepPlan:
     )
 
 
-def load_advanced_order_plan(path: str) -> list[WorkflowPlan]:
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.loads(f.read())
+def parse_advanced_order_rows(raw: Any) -> list[WorkflowPlan]:
     if not isinstance(raw, list):
         raise ValueError("Advanced order plan must be a JSON array")
     plans: list[WorkflowPlan] = []
@@ -151,6 +149,12 @@ def load_advanced_order_plan(path: str) -> list[WorkflowPlan]:
     if not plans:
         raise ValueError("Advanced order plan is empty")
     return plans
+
+
+def load_advanced_order_plan(path: str) -> list[WorkflowPlan]:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.loads(f.read())
+    return parse_advanced_order_rows(raw)
 
 
 def _position_comment(position: Any) -> str:

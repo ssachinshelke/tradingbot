@@ -86,9 +86,16 @@ def main() -> None:
         load_advanced_order_plan,
     )
     from mt5_bot.engine import TradingEngine
+    from ui_backend.license_manager import LicenseManager
 
     cfg = load_config()
     cmd = args.command
+    license_status = LicenseManager().status()
+    if license_status.status in ("trial_expired", "license_invalid"):
+        raise RuntimeError(
+            license_status.error
+            or "License is invalid or expired. Activate license to continue."
+        )
 
     # ── Single-account commands that need a bot instance ──────────────────
 

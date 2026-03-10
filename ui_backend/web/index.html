@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tradingm5 Multi-Account Dashboard</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Tradingm5 Dashboard</h1>
+    <div id="licenseBadge" class="badge">License: ...</div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Accounts</h2>
+      <form id="accountForm" class="form">
+        <input name="name" placeholder="account name" required>
+        <input name="mt5_login" placeholder="login" type="number" required>
+        <input name="mt5_password" placeholder="password" required>
+        <input name="mt5_server" placeholder="server" required>
+        <input name="mt5_path" placeholder="terminal64.exe path (optional)">
+        <label><input name="mt5_portable" type="checkbox"> portable</label>
+        <button type="submit">Save Account</button>
+      </form>
+      <div class="actions">
+        <button id="refreshAccountsBtn">Refresh Accounts</button>
+        <button id="healthcheckAllBtn">Healthcheck All</button>
+      </div>
+      <table id="accountsTable">
+        <thead><tr><th>Select</th><th>Name</th><th>Login</th><th>Server</th><th>Health</th><th>Action</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Quick Multi-Order (Minimal Input)</h2>
+      <form id="quickOrderForm" class="form">
+        <input name="symbol" placeholder="symbol (EURUSD)" value="EURUSD" required>
+        <select name="side">
+          <option value="buy">buy</option>
+          <option value="sell">sell</option>
+        </select>
+        <input name="volume" type="number" step="0.01" placeholder="volume" value="0.1" required>
+        <input name="trigger_price" type="number" step="0.00001" placeholder="trigger price (optional)">
+        <input name="sl_price" type="number" step="0.00001" placeholder="SL price (optional)">
+        <input name="tp_price" type="number" step="0.00001" placeholder="TP price (optional)">
+        <input name="comment" placeholder="comment (optional)">
+        <button type="submit">Place On Selected Accounts</button>
+      </form>
+      <pre id="quickOrderResult" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Submit Multi-Account Plan</h2>
+      <p class="hint">Use flat or advanced rows. One JSON array.</p>
+      <textarea id="planJson" rows="14">[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "side": "buy",
+    "volume": 0.1,
+    "trigger_price": 1.1000,
+    "comment": "ui-order"
+  }
+]</textarea>
+      <div class="actions">
+        <button id="submitPlanBtn">Start Trading</button>
+      </div>
+      <pre id="planResult" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Live PnL and Positions</h2>
+      <div class="metric">Total Floating Profit: <strong id="totalProfit">0.00</strong></div>
+      <div class="actions">
+        <button id="refreshBookBtn">Refresh Book</button>
+        <button id="closeSelectedBtn">Close Selected Account+Symbol</button>
+      </div>
+      <table id="positionsTable">
+        <thead><tr><th>Select</th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Volume</th><th>P/L</th><th>Close</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Pending Orders</h2>
+      <table id="ordersTable">
+        <thead><tr><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Volume</th><th>Price</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>License</h2>
+      <div class="actions">
+        <input id="licensePath" placeholder="C:\path\license.json">
+        <button id="activateLicenseBtn">Activate License</button>
+        <button id="refreshLicenseBtn">Refresh License</button>
+      </div>
+      <pre id="licenseResult" class="result"></pre>
+    </section>
+  </main>
+
+  <footer class="footer">Realtime refresh: 1s WebSocket stream</footer>
+  <script src="/ui/app.js"></script>
+</body>
+</html>

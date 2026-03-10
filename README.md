@@ -1,3 +1,344 @@
+# Tradingm5 - Multi-Account Trading Platform
+
+Local multi-account MT5 trading platform with:
+- realtime dashboard (health, orders, positions, floating P/L)
+- advanced JSON order workflows
+- one-click close by account/symbol
+- offline 7-day trial + signed license activation
+
+---
+
+## 1) Quick Start (New User)
+
+### Prerequisites
+- Windows 10/11
+- Python 3.11 (MT5 requirement)
+- MetaTrader 5 terminal(s) installed
+
+### Install
+```powershell
+py -3.11 -m venv .venv311
+.venv311\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+If PowerShell blocks activation:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv311\Scripts\Activate.ps1
+```
+
+### Start Local UI
+```powershell
+python run_ui.py
+```
+
+Open:
+- [http://127.0.0.1:8787](http://127.0.0.1:8787)
+
+---
+
+## 2) Configuration Files
+
+### `.env`
+Main runtime configuration. Minimum required:
+- `MT5_LOGIN`
+- `MT5_PASSWORD`
+- `MT5_SERVER`
+
+For licensing:
+- `LICENSE_PUBLIC_KEY_B64` (vendor public key for license validation)
+
+### `accounts.json`
+Multi-account credentials and terminal paths.
+
+Example:
+```json
+[
+  {
+    "name": "account-1",
+    "mt5_login": 12345678,
+    "mt5_password": "secret",
+    "mt5_server": "MetaQuotes-Demo",
+    "mt5_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+    "mt5_portable": false
+  }
+]
+```
+
+### `order_plan.advanced.json`
+Single standard format for multi-account order execution.
+Supports simple and advanced workflows.
+
+---
+
+## 3) Healthcheck Commands
+
+Use these before live trading.
+
+### Single-account healthcheck
+```powershell
+python tests/run_test.py healthcheck --symbol EURUSD
+```
+
+### Multi-account healthcheck
+```powershell
+python tests/run_test.py multi-healthcheck --accounts-file accounts.json --symbol EURUSD
+```
+
+### Discover MT5 terminal paths
+```powershell
+python tests/run_test.py discover-terminal
+```
+
+### Pending visibility test
+```powershell
+python tests/run_test.py pending-test --symbol EURUSD --volume 0.01
+python tests/run_test.py pending-test-all --accounts-file accounts.json --symbol EURUSD
+```
+
+---
+
+## 4) Order Placement Commands
+
+## Standard multi-account command (recommended)
+```powershell
+python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file accounts.json
+```
+
+### Simple market order row
+```json
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "side": "buy",
+    "volume": 0.1,
+    "comment": "market-buy"
+  }
+]
+```
+
+### Simple triggered order row
+```json
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "side": "buy",
+    "volume": 0.1,
+    "trigger_price": 1.1000,
+    "sl_price": 1.0900,
+    "tp_price": 1.1200,
+    "comment": "buy-at-1.1000"
+  }
+]
+```
+
+### Advanced chained workflow (entry + on_fill)
+```json
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "entry": {
+      "side": "buy",
+      "volume": 0.1,
+      "trigger_price": 1.1000,
+      "comment": "entry"
+    },
+    "on_fill": {
+      "side": "sell",
+      "volume": 0.1,
+      "trigger_price": 1.2000,
+      "comment": "exit"
+    },
+    "timeout_seconds": 43200
+  }
+]
+```
+
+### Close via JSON (no ticket required)
+```json
+[
+  {
+    "account": "account-1",
+    "symbol": "EURUSD",
+    "action": "close",
+    "side": "all",
+    "comment": "close-eurusd"
+  }
+]
+```
+
+### Other useful trading commands
+```powershell
+python main.py status
+python main.py positions --symbol EURUSD
+python main.py orders --symbol EURUSD
+python main.py history --days 7
+python main.py close --ticket 12345678
+```
+
+---
+
+## 5) Add Multiple MT5 Portable Terminals
+
+Create isolated terminal copies for stable multi-account execution:
+
+```powershell
+python tests/run_test.py create-portable --source-dir "C:\Program Files\MetaTrader 5" --names acc1,acc2,acc3 --append-accounts
+```
+
+What this does:
+- clones MT5 into `mt5-portable/<name>`
+- creates `start-portable.bat` in each copy
+- appends account stubs to `accounts.json` (if `--append-accounts` is used)
+
+After that:
+1. open `accounts.json`
+2. fill each account login/password/server
+3. run multi-healthcheck
+
+---
+
+## 6) Multi-Account Workflow (Recommended)
+
+1. Add all accounts in `accounts.json` (or via UI).
+2. Run healthcheck on all accounts.
+3. Prepare `order_plan.advanced.json`.
+4. Execute:
+   ```powershell
+   python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file accounts.json
+   ```
+5. Monitor live in UI or with `positions`/`orders`.
+
+Execution model:
+- parallel across accounts
+- sequential within each account workflow chain
+
+---
+
+## 7) Local UI Features
+
+UI provides one dashboard for:
+- account CRUD + per-account/all-account healthcheck
+- quick multi-order form (minimal input: symbol, side, volume, optional trigger/sl/tp)
+- plan submission
+- live active positions + pending orders
+- realtime floating P/L
+- one-click close by row and close selected account+symbol groups
+- license status + activation
+
+Run:
+```powershell
+python run_ui.py
+```
+
+---
+
+## 8) Realtime Behavior
+
+- backend WebSocket pushes snapshots every 1 second
+- UI updates profit/positions/pending orders in near realtime
+- trading submissions support idempotent `request_id`
+
+---
+
+## 9) Licensing (7-day trial + offline activation)
+
+Runtime states:
+- `trial_active`
+- `trial_expired`
+- `license_valid`
+- `license_invalid`
+
+### Get machine hash (customer machine)
+```powershell
+python tools/license_machine_id.py
+```
+
+### Vendor issues signed license file
+```powershell
+python tools/license_issuer.py --private-key-b64 "<PRIVATE_KEY_B64>" --customer-id "cust-001" --machine-hash "<MACHINE_HASH>" --days 365 --output "license.json"
+```
+
+### Activate in app
+- UI: use License section and provide file path
+- API: `POST /api/license/activate`
+
+Notes:
+- private key must stay with vendor only
+- public key goes to `LICENSE_PUBLIC_KEY_B64` on client side
+- this is an offline hardened licensing model (strong deterrence, not mathematically unbreakable)
+
+---
+
+## 10) Packaging for Distribution (Code Not Exposed)
+
+`.pyc` alone is not enough for protection. Use executable packaging.
+
+Build Windows executable:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_windows_bundle.ps1
+```
+
+Output:
+- `dist/Tradingm5UI.exe`
+- distribute only executable/runtime files to end users (no source files)
+
+Launch helper:
+```powershell
+.\scripts\start_ui.bat
+```
+
+---
+
+## 11) Requirements
+
+`requirements.txt` includes:
+- `MetaTrader5` (Python < 3.12)
+- `python-dotenv`
+- `numpy`
+- `fastapi`
+- `uvicorn[standard]`
+- `pydantic`
+- `cryptography`
+
+---
+
+## 12) Troubleshooting
+
+### `Invalid "comment" argument`
+- broker rejects comment field for some order types
+- platform now retries with empty comment automatically
+
+### `Unsupported filling mode`
+- broker/symbol does not support fixed mode
+- platform now tries multiple filling modes automatically
+
+### PowerShell venv activation blocked
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv311\Scripts\Activate.ps1
+```
+
+### `Market closed`
+- broker session is closed for symbol/account
+
+### Command keeps running in advanced plan
+- by design, chained workflows wait for conditions
+- standalone entry-only rows now place and exit immediately
+
+---
+
+## 13) Safety Notes
+
+- Always test on demo accounts first.
+- Keep `.env` and `accounts.json` private.
+- Validate symbol names per broker (`EURUSD`, `EURUSDm`, etc.).
+- Use SL/TP unless you intentionally want manual exits.
 # MT5 Trading Bot
 
 Automated multi-account trading bot for MetaTrader 5 via the official Python API.
