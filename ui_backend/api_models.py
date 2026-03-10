@@ -35,6 +35,17 @@ class PortableCreateResponse(ApiResponse):
     created: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class AccountImportRequest(BaseModel):
+    file_path: str = "account.json"
+
+
+class AccountImportResponse(ApiResponse):
+    file_path: str
+    imported_count: int
+    max_accounts: int
+    accounts: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class AccountView(BaseModel):
     name: str
     mt5_login: int

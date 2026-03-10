@@ -16,6 +16,7 @@ const API = {
   getAccounts()           { return this.get('/api/accounts'); },
   upsertAccount(p)        { return this.post('/api/accounts', p); },
   createPortable(p)       { return this.post('/api/accounts/create-portable', p); },
+  importAccounts(filePath = 'account.json') { return this.post('/api/accounts/import-file', { file_path: filePath }); },
   deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
   healthcheckAll()        { return this.post('/api/healthcheck', {}); },
   healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
@@ -201,14 +202,20 @@ $('#accountsTable').addEventListener('click', async e => {
 $('#accountForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target);
+  const loginNum = Number(f.get('mt5_login'));
+  const defaultName = Number.isFinite(loginNum) && loginNum > 0 ? `acc-${loginNum}` : '';
   const payload = {
-    name: String(f.get('name')).trim(),
-    mt5_login: Number(f.get('mt5_login')),
+    name: String(f.get('name') || '').trim() || defaultName,
+    mt5_login: loginNum,
     mt5_password: String(f.get('mt5_password')),
     mt5_server: String(f.get('mt5_server')).trim(),
     mt5_path: String(f.get('mt5_path') || '').trim() || null,
     mt5_portable: f.get('mt5_portable') === 'on',
   };
+  if (!payload.name) {
+    alert('Please enter account name or valid login.');
+    return;
+  }
   try {
     const isExisting = state.accounts.some(a => a.name === payload.name);
     if (!isExisting && state.accounts.length >= API.MAX_ACCOUNTS) {
@@ -219,6 +226,22 @@ $('#accountForm').addEventListener('submit', async e => {
     e.target.reset();
     await loadAccounts();
   } catch (err) { alert('Save failed: ' + (err.detail || err.message || JSON.stringify(err))); }
+});
+
+$('#accountImportForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const filePath = String(f.get('file_path') || '').trim() || 'account.json';
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const done = showSpinner(submitBtn);
+  try {
+    const out = await API.importAccounts(filePath);
+    setResult('accountImportResult', out);
+    await loadAccounts();
+  } catch (err) {
+    setResult('accountImportResult', { ok: false, error: err.detail || err.message || String(err) });
+  }
+  done();
 });
 
 $('#portableForm').addEventListener('submit', async e => {
@@ -248,6 +271,8 @@ $('#portableForm').addEventListener('submit', async e => {
 
 async function initPortableDefaults() {
   const sourceInput = $('#portableForm [name="source_dir"]');
+  const accPathInput = $('#accountForm [name="mt5_path"]');
+  const serverInput = $('#accountForm [name="mt5_server"]');
   const hint = $('#portableHint');
   if (!sourceInput) return;
   if (!sourceInput.value) {
@@ -257,6 +282,13 @@ async function initPortableDefaults() {
     const res = await API.discoverMT5();
     if (res.default_source_dir) {
       sourceInput.value = res.default_source_dir;
+      if (accPathInput && !accPathInput.value.trim()) {
+        const sep = res.default_source_dir.endsWith('\\') ? '' : '\\';
+        accPathInput.value = `${res.default_source_dir}${sep}terminal64.exe`;
+      }
+    }
+    if (serverInput && !serverInput.value.trim()) {
+      serverInput.value = 'MetaQuotes-Demo';
     }
     if (hint) {
       if (res.install_required) {

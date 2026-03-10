@@ -17,6 +17,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api_models import (
+    AccountImportRequest,
+    AccountImportResponse,
     AccountPayload,
     ActiveBookResponse,
     ApiResponse,
@@ -182,6 +184,17 @@ async def create_portable_accounts(req: PortableCreateRequest) -> PortableCreate
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return PortableCreateResponse(ok=True, **out)
+
+
+@app.post("/api/accounts/import-file", response_model=AccountImportResponse)
+async def import_accounts_file(req: AccountImportRequest) -> AccountImportResponse:
+    try:
+        out = await _run_blocking(service.import_accounts_from_file, req.file_path)
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AccountImportResponse(ok=True, **out)
 
 
 @app.delete("/api/accounts/{name}", response_model=ApiResponse)

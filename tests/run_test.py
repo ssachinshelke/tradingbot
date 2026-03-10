@@ -90,7 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     default_root = str(PROJECT_ROOT / "mt5-portable")
     cp.add_argument("--target-root", default=default_root)
     cp.add_argument("--names", required=True, help="Comma-separated copy names")
-    cp.add_argument("--accounts-file", default="accounts.json")
+    cp.add_argument("--accounts-file", default="account.json")
     cp.add_argument("--append-accounts", action="store_true")
 
     return parser

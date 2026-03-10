@@ -39,6 +39,9 @@ def _order_type_name(order_type: int) -> str:
 class TradingUIService:
     def __init__(self) -> None:
         self.cfg: BotConfig = self._load_config_for_ui()
+        if not os.getenv("ACCOUNTS_FILE", "").strip():
+            # UI/release mode uses a single default account file for simpler onboarding.
+            self.cfg = replace(self.cfg, accounts_file="account.json")
         self._accounts_file = Path(self.cfg.accounts_file)
         self._req_lock = Lock()
         self._journal_lock = Lock()
@@ -46,6 +49,13 @@ class TradingUIService:
         self._closed_journal_path = Path("logs") / "closed_deals_journal.jsonl"
         self._closed_journal_path.parent.mkdir(parents=True, exist_ok=True)
         self._max_ui_accounts = max(1, int(os.getenv("UI_MAX_ACCOUNTS", "4") or "4"))
+        self._ensure_default_accounts_file()
+
+    def _ensure_default_accounts_file(self) -> None:
+        if self._accounts_file.exists():
+            return
+        self._accounts_file.parent.mkdir(parents=True, exist_ok=True)
+        self._accounts_file.write_text("[]", encoding="utf-8")
 
     @staticmethod
     def _load_config_for_ui() -> BotConfig:
@@ -98,15 +108,9 @@ class TradingUIService:
 
     def _load_accounts(self) -> list[AccountConfig]:
         path = self._accounts_file
-        # If env points to account.json but accounts.json exists, auto-heal.
         if not path.exists():
-            fallback = Path("accounts.json")
-            if path.name.lower() != "accounts.json" and fallback.exists():
-                path = fallback
-                self._accounts_file = fallback
-            else:
-                # First-run UX: no accounts file yet.
-                return []
+            self._ensure_default_accounts_file()
+            return []
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             raise ValueError("Accounts file must contain a JSON array")
@@ -285,6 +289,47 @@ class TradingUIService:
             "has_password": bool(updated.mt5_password),
         }
 
+    def import_accounts_from_file(self, file_path: str) -> dict[str, Any]:
+        src = Path((file_path or "").strip() or "account.json")
+        if not src.exists():
+            raise ValueError(f"Accounts file not found: {src}")
+        raw = json.loads(src.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            raise ValueError("Accounts import file must contain a JSON array")
+        imported: list[AccountConfig] = []
+        seen: set[str] = set()
+        for idx, item in enumerate(raw, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(f"Account entry #{idx} must be an object")
+            name = str(item.get("name", f"account-{idx}")).strip()
+            if not name:
+                raise ValueError(f"Account entry #{idx} has empty name")
+            if name in seen:
+                continue
+            seen.add(name)
+            imported.append(
+                AccountConfig(
+                    name=name,
+                    mt5_login=int(item.get("mt5_login", 0)),
+                    mt5_password=str(item.get("mt5_password", "")),
+                    mt5_server=str(item.get("mt5_server", "")),
+                    mt5_path=(str(item.get("mt5_path", "")).strip() or None),
+                    mt5_portable=bool(item.get("mt5_portable", False)),
+                )
+            )
+        if len(imported) > self._max_ui_accounts:
+            raise ValueError(
+                f"Import has {len(imported)} accounts, but max allowed is {self._max_ui_accounts}."
+            )
+        self._accounts_file = src
+        self._save_accounts(imported)
+        return {
+            "file_path": str(src.resolve()),
+            "imported_count": len(imported),
+            "max_accounts": self._max_ui_accounts,
+            "accounts": self.get_accounts(),
+        }
+
     def create_portable_copies(
         self,
         source_dir: str,
@@ -342,6 +387,34 @@ class TradingUIService:
                 )
             if to_append:
                 self._save_accounts(accounts + to_append)
+
+        # Keep a single local account.json and update created portable paths in it.
+        account_json_template = Path("account.json")
+        existing_rows: list[dict[str, Any]] = []
+        if account_json_template.exists():
+            try:
+                raw = json.loads(account_json_template.read_text(encoding="utf-8"))
+                if isinstance(raw, list):
+                    existing_rows = [r for r in raw if isinstance(r, dict)]
+            except Exception:
+                existing_rows = []
+        by_name: dict[str, dict[str, Any]] = {}
+        for row in existing_rows:
+            name = str(row.get("name", "")).strip()
+            if name:
+                by_name[name] = dict(row)
+        for item in created:
+            name = str(item["name"])
+            current = by_name.get(name, {})
+            current.setdefault("name", name)
+            current.setdefault("mt5_login", 0)
+            current.setdefault("mt5_password", "fill_me")
+            current.setdefault("mt5_server", "MetaQuotes-Demo")
+            current["mt5_path"] = item["mt5_path"]
+            current["mt5_portable"] = True
+            by_name[name] = current
+        merged = list(by_name.values())
+        account_json_template.write_text(json.dumps(merged, indent=2), encoding="utf-8")
 
         return {
             "target_root": str(root.resolve()),

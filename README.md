@@ -61,13 +61,17 @@ This section is for binary users (no source code access needed).
    - Browser should auto-open to `http://127.0.0.1:8787`.
    - If it does not, open that URL manually.
 3. In `Accounts` tab:
-   - Add Account 1 and Account 2.
+   - Preferred: click `Import Accounts` with `account.json`.
+   - Optional: add accounts manually (name is optional; app auto-generates from login).
+   - Server defaults to `MetaQuotes-Demo`.
+   - Terminal path auto-fills when MT5 is detected.
    - Run `Healthcheck All` and confirm both are OK.
 4. Optional: auto-create portable MT5 folders:
    - Open `Auto-Create Portable MT5 Folders (Windows)`.
    - Source path is auto-detected when possible (falls back to `C:\Program Files\MetaTrader 5`).
    - Set source folder (must contain `terminal64.exe`), target root, and names.
    - Click `Create Portable Folders`.
+   - A default `account.json` template is created automatically (if not already present).
 5. Go to `Trading` tab:
    - Click `Run Preflight` and confirm `Ready: YES`.
    - Add one order row per account.
@@ -101,7 +105,7 @@ Main runtime configuration. Minimum required:
 For licensing:
 - `LICENSE_PUBLIC_KEY_B64` (vendor public key for license validation)
 
-### `accounts.json`
+### `account.json`
 Multi-account credentials and terminal paths.
 
 Example:
@@ -135,7 +139,7 @@ python tests/run_test.py healthcheck --symbol EURUSD
 
 ### Multi-account healthcheck
 ```powershell
-python tests/run_test.py multi-healthcheck --accounts-file accounts.json --symbol EURUSD
+python tests/run_test.py multi-healthcheck --accounts-file account.json --symbol EURUSD
 ```
 
 ### Discover MT5 terminal paths
@@ -146,7 +150,7 @@ python tests/run_test.py discover-terminal
 ### Pending visibility test
 ```powershell
 python tests/run_test.py pending-test --symbol EURUSD --volume 0.01
-python tests/run_test.py pending-test-all --accounts-file accounts.json --symbol EURUSD
+python tests/run_test.py pending-test-all --accounts-file account.json --symbol EURUSD
 ```
 
 ---
@@ -155,7 +159,7 @@ python tests/run_test.py pending-test-all --accounts-file accounts.json --symbol
 
 ## Standard multi-account command (recommended)
 ```powershell
-python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file accounts.json
+python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file account.json
 ```
 
 ### Simple market order row
@@ -245,10 +249,10 @@ python tests/run_test.py create-portable --source-dir "C:\Program Files\MetaTrad
 What this does:
 - clones MT5 into `mt5-portable/<name>`
 - creates `start-portable.bat` in each copy
-- appends account stubs to `accounts.json` (if `--append-accounts` is used)
+- appends account stubs to `account.json` (if `--append-accounts` is used)
 
 After that:
-1. open `accounts.json`
+1. open `account.json`
 2. fill each account login/password/server
 3. run multi-healthcheck
 
@@ -256,12 +260,12 @@ After that:
 
 ## 6) Multi-Account Workflow (Recommended)
 
-1. Add all accounts in `accounts.json` (or via UI).
+1. Add all accounts in `account.json` (or via UI).
 2. Run healthcheck on all accounts.
 3. Prepare `order_plan.advanced.json`.
 4. Execute:
    ```powershell
-   python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file accounts.json
+   python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file account.json
    ```
 5. Monitor live in UI or with `positions`/`orders`.
 
@@ -473,7 +477,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ## 13) Safety Notes
 
 - Always test on demo accounts first.
-- Keep `.env` and `accounts.json` private.
+- Keep `.env` and `account.json` private.
 - Validate symbol names per broker (`EURUSD`, `EURUSDm`, etc.).
 - Use SL/TP unless you intentionally want manual exits.
 # MT5 Trading Bot
@@ -555,7 +559,7 @@ python tests/run_test.py healthcheck --symbol EURUSD
 | `ENABLE_TRAILING_STOP` | `true` | Auto trailing SL |
 | `ENABLE_PARTIAL_TP` | `true` | Auto partial close at TP trigger |
 
-### `accounts.json` — multi-account config
+### `account.json` — multi-account config
 
 ```json
 [
@@ -644,7 +648,7 @@ python main.py orders
 python main.py history --days 7
 
 # Standard multi-account command (simple + advanced JSON supported)
-python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file accounts.json
+python main.py multi-advanced-plan --plan-file order_plan.advanced.json --accounts-file account.json
 
 # Run automated strategy loop
 python main.py run --symbol EURUSD
@@ -660,15 +664,15 @@ python main.py run --symbol EURUSD --cycles 50
 python tests/run_test.py healthcheck --symbol EURUSD
 
 # Multi-account health check
-python tests/run_test.py multi-healthcheck --accounts-file accounts.json --symbol EURUSD
+python tests/run_test.py multi-healthcheck --accounts-file account.json --symbol EURUSD
 
 # Place far pending orders to verify broker UI visibility
 python tests/run_test.py pending-test --symbol EURUSD --volume 0.01
-python tests/run_test.py pending-test-all --accounts-file accounts.json --symbol EURUSD
+python tests/run_test.py pending-test-all --accounts-file account.json --symbol EURUSD
 
 # Quick dry-run (no real orders)
 python tests/run_test.py dry-run --side buy --symbol EURUSD
-python tests/run_test.py dry-run --side buy --accounts-file accounts.json
+python tests/run_test.py dry-run --side buy --accounts-file account.json
 
 # Find MT5 terminal executables on this machine
 python tests/run_test.py discover-terminal
@@ -856,6 +860,6 @@ Tradingm5/
 ## Notes
 
 - **Always test on a demo account first.**
-- Keep `.env` and `accounts.json` out of version control (`.gitignore` covers both).
+- Keep `.env` and `account.json` out of version control (`.gitignore` covers both).
 - For multi-account: use separate MT5 terminal instances (portable mode) per account.
 - Journal files (`trade_journal.csv`, `dispatch_journal.csv`) are generated at runtime.

@@ -63,15 +63,25 @@
       <p class="sub" id="accountLimitHint">Max 4 accounts allowed for low-latency execution.</p>
     </div>
     <form id="accountForm" class="acc-form">
-      <input name="name" placeholder="account name" required>
+      <input name="name" placeholder="account name (optional)">
       <input name="mt5_login" placeholder="login (number)" type="number" required>
       <input name="mt5_password" placeholder="password" type="password" required>
-      <input name="mt5_server" placeholder="broker server" required>
-      <input name="mt5_path" placeholder="terminal64.exe path (optional)">
+      <input name="mt5_server" placeholder="broker server" value="MetaQuotes-Demo" required>
+      <input name="mt5_path" placeholder="terminal64.exe path (auto-detected when possible)">
       <label class="cb-label"><input name="mt5_portable" type="checkbox"> portable</label>
       <button type="submit" class="btn-sm btn-accent">Save Account</button>
     </form>
     <div class="sub" id="accountLimitStatus"></div>
+    <div class="panel-header" style="margin-top:10px">
+      <h3>Import Accounts JSON</h3>
+      <p class="sub">Load all accounts from a local JSON file (default: <code>account.json</code>).</p>
+    </div>
+    <form id="accountImportForm" class="acc-form">
+      <input name="file_path" placeholder="account.json" value="account.json">
+      <button type="submit" class="btn-sm btn-accent">Import Accounts</button>
+    </form>
+    <div class="result-box" id="accountImportResult"></div>
+
     <div class="panel-header" style="margin-top:12px">
       <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
       <p class="sub">Creates folder copies and optional account stubs from one source terminal.</p>
@@ -193,6 +203,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-10"></script>
+  <script src="/ui/app.js?v=20260310-12"></script>
 </body>
 </html>

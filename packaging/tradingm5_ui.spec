@@ -24,9 +24,11 @@ hiddenimports = [
     "uvicorn.protocols.websockets",
     "fastapi",
     "starlette",
+    "numpy",
 ]
 hiddenimports += collect_submodules("ui_backend")
 hiddenimports += collect_submodules("mt5_bot")
+hiddenimports += collect_submodules("numpy")
 
 
 a = Analysis(
