@@ -42,6 +42,7 @@ class AccountImportRequest(BaseModel):
 class AccountImportResponse(ApiResponse):
     file_path: str
     imported_count: int
+    skipped_count: int = 0
     max_accounts: int
     accounts: list[dict[str, Any]] = Field(default_factory=list)
 

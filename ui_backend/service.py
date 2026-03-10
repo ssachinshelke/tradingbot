@@ -118,12 +118,20 @@ class TradingUIService:
         for idx, item in enumerate(raw, start=1):
             if not isinstance(item, dict):
                 raise ValueError(f"Account entry #{idx} must be an object")
+            login = int(item.get("mt5_login", 0) or 0)
+            # Treat login=0 rows as editable templates, not active accounts.
+            if login <= 0:
+                continue
+            server = str(item.get("mt5_server", "")).strip()
+            password = str(item.get("mt5_password", ""))
+            if not server or not password:
+                continue
             accounts.append(
                 AccountConfig(
                     name=str(item.get("name", f"account-{idx}")).strip(),
-                    mt5_login=int(item.get("mt5_login", 0)),
-                    mt5_password=str(item.get("mt5_password", "")),
-                    mt5_server=str(item.get("mt5_server", "")),
+                    mt5_login=login,
+                    mt5_password=password,
+                    mt5_server=server,
                     mt5_path=(str(item.get("mt5_path", "")).strip() or None),
                     mt5_portable=bool(item.get("mt5_portable", False)),
                 )
@@ -297,6 +305,7 @@ class TradingUIService:
         if not isinstance(raw, list):
             raise ValueError("Accounts import file must contain a JSON array")
         imported: list[AccountConfig] = []
+        skipped = 0
         seen: set[str] = set()
         for idx, item in enumerate(raw, start=1):
             if not isinstance(item, dict):
@@ -307,12 +316,18 @@ class TradingUIService:
             if name in seen:
                 continue
             seen.add(name)
+            login = int(item.get("mt5_login", 0) or 0)
+            server = str(item.get("mt5_server", "")).strip()
+            password = str(item.get("mt5_password", ""))
+            if login <= 0 or not server or not password:
+                skipped += 1
+                continue
             imported.append(
                 AccountConfig(
                     name=name,
-                    mt5_login=int(item.get("mt5_login", 0)),
-                    mt5_password=str(item.get("mt5_password", "")),
-                    mt5_server=str(item.get("mt5_server", "")),
+                    mt5_login=login,
+                    mt5_password=password,
+                    mt5_server=server,
                     mt5_path=(str(item.get("mt5_path", "")).strip() or None),
                     mt5_portable=bool(item.get("mt5_portable", False)),
                 )
@@ -326,6 +341,7 @@ class TradingUIService:
         return {
             "file_path": str(src.resolve()),
             "imported_count": len(imported),
+            "skipped_count": skipped,
             "max_accounts": self._max_ui_accounts,
             "accounts": self.get_accounts(),
         }

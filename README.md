@@ -61,7 +61,9 @@ This section is for binary users (no source code access needed).
    - Browser should auto-open to `http://127.0.0.1:8787`.
    - If it does not, open that URL manually.
 3. In `Accounts` tab:
-   - Preferred: click `Import Accounts` with `account.json`.
+   - Step 1: create portable folders from UI.
+   - Step 2: fill `account.json` (`mt5_login`, `mt5_password`, `mt5_server`).
+   - Step 3: click `Import Accounts`.
    - Optional: add accounts manually (name is optional; app auto-generates from login).
    - Server defaults to `MetaQuotes-Demo`.
    - Terminal path auto-fills when MT5 is detected.
@@ -72,6 +74,7 @@ This section is for binary users (no source code access needed).
    - Set source folder (must contain `terminal64.exe`), target root, and names.
    - Click `Create Portable Folders`.
    - A default `account.json` template is created automatically (if not already present).
+   - Rows with `mt5_login=0` are templates and are skipped until you fill real values.
 5. Go to `Trading` tab:
    - Click `Run Preflight` and confirm `Ready: YES`.
    - Add one order row per account.

@@ -756,6 +756,12 @@ $('#cancelAllPendingBtn').addEventListener('click', async function () {
 });
 
 async function refreshHistory() {
+  if (!state.accounts.length) {
+    $('#historyStatus').textContent = 'No active accounts imported yet.';
+    const tbody = $('#historyTable tbody');
+    if (tbody) tbody.innerHTML = '';
+    return;
+  }
   const account = $('#historyAccount')?.value || '';
   const mode = $('#historyMode')?.value || 'all';
   const daysRaw = Number($('#historyDays')?.value || 7);
@@ -829,6 +835,12 @@ function renderHistoryMini(items) {
 
 async function refreshHistoryMiniOnly() {
   const status = $('#historyMiniStatus');
+  if (!state.accounts.length) {
+    if (status) status.textContent = 'No active accounts imported yet.';
+    const tbody = $('#historyMiniTable tbody');
+    if (tbody) tbody.innerHTML = '';
+    return;
+  }
   if (status) status.textContent = 'Loading...';
   try {
     const res = await API.closedHistory('', 1, 2000, 'all');
