@@ -15,7 +15,7 @@ from uuid import uuid4
 from mt5_bot import mt5
 from mt5_bot.advanced_plan import execute_advanced_order_plan, parse_advanced_order_rows
 from mt5_bot.client import TradingBot
-from mt5_bot.config import AccountConfig, BotConfig, load_accounts, load_config
+from mt5_bot.config import AccountConfig, BotConfig, load_config
 from mt5_bot.multi import healthcheck_all_accounts
 
 
@@ -98,10 +98,38 @@ class TradingUIService:
             )
 
     def _load_accounts(self) -> list[AccountConfig]:
-        return load_accounts(str(self._accounts_file))
+        path = self._accounts_file
+        # If env points to account.json but accounts.json exists, auto-heal.
+        if not path.exists():
+            fallback = Path("accounts.json")
+            if path.name.lower() != "accounts.json" and fallback.exists():
+                path = fallback
+                self._accounts_file = fallback
+            else:
+                # First-run UX: no accounts file yet.
+                return []
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            raise ValueError("Accounts file must contain a JSON array")
+        accounts: list[AccountConfig] = []
+        for idx, item in enumerate(raw, start=1):
+            if not isinstance(item, dict):
+                raise ValueError(f"Account entry #{idx} must be an object")
+            accounts.append(
+                AccountConfig(
+                    name=str(item.get("name", f"account-{idx}")).strip(),
+                    mt5_login=int(item.get("mt5_login", 0)),
+                    mt5_password=str(item.get("mt5_password", "")),
+                    mt5_server=str(item.get("mt5_server", "")),
+                    mt5_path=(str(item.get("mt5_path", "")).strip() or None),
+                    mt5_portable=bool(item.get("mt5_portable", False)),
+                )
+            )
+        return accounts
 
     def _save_accounts(self, accounts: list[AccountConfig]) -> None:
         serializable = [asdict(a) for a in accounts]
+        self._accounts_file.parent.mkdir(parents=True, exist_ok=True)
         self._accounts_file.write_text(
             json.dumps(serializable, indent=2),
             encoding="utf-8",
@@ -704,6 +732,90 @@ class TradingUIService:
                 "total": len(checks),
             },
             "checks": checks,
+        }
+
+    def discover_mt5_installations(self) -> dict[str, Any]:
+        """Best-effort MT5 terminal discovery for UI defaults."""
+        if os.name != "nt":
+            return {
+                "platform": os.name,
+                "count": 0,
+                "items": [],
+                "default_source_dir": "",
+                "install_required": True,
+                "message": "Auto-detection is available on Windows only.",
+            }
+
+        hits: list[str] = []
+        seen: set[str] = set()
+
+        def add_if_terminal(path: Path) -> None:
+            exe = path if path.name.lower().startswith("terminal") else (path / "terminal64.exe")
+            if exe.exists():
+                p = str(exe.resolve())
+                key = p.lower()
+                if key not in seen:
+                    seen.add(key)
+                    hits.append(p)
+
+        # Fast common-location checks first.
+        common_dirs = [
+            Path(r"C:\Program Files\MetaTrader 5"),
+            Path(r"C:\Program Files (x86)\MetaTrader 5"),
+            Path(os.getenv("LOCALAPPDATA", "")) / "Programs" / "MetaTrader 5",
+        ]
+        for d in common_dirs:
+            if d.exists():
+                add_if_terminal(d)
+
+        # Broader best-effort search if nothing found.
+        if not hits:
+            roots = [
+                Path(r"C:\Program Files"),
+                Path(r"C:\Program Files (x86)"),
+                Path(os.getenv("LOCALAPPDATA", "")),
+                Path(os.getenv("APPDATA", "")),
+            ]
+            max_hits = 8
+            max_dirs = 4000
+            walked = 0
+            for root in roots:
+                if not root.exists():
+                    continue
+                for dirpath, _, filenames in os.walk(root):
+                    walked += 1
+                    if walked > max_dirs or len(hits) >= max_hits:
+                        break
+                    lowered = {f.lower() for f in filenames}
+                    if "terminal64.exe" in lowered:
+                        add_if_terminal(Path(dirpath))
+                    elif "terminal.exe" in lowered:
+                        exe = Path(dirpath) / "terminal.exe"
+                        if exe.exists():
+                            p = str(exe.resolve())
+                            key = p.lower()
+                            if key not in seen:
+                                seen.add(key)
+                                hits.append(p)
+                if walked > max_dirs or len(hits) >= max_hits:
+                    break
+
+        default_source = ""
+        if hits:
+            default_source = str(Path(hits[0]).parent)
+        else:
+            default_source = r"C:\Program Files\MetaTrader 5"
+
+        return {
+            "platform": "windows",
+            "count": len(hits),
+            "items": hits,
+            "default_source_dir": default_source,
+            "install_required": len(hits) == 0,
+            "message": (
+                "MT5 detected." if hits else
+                "MT5 terminal not found. Install MetaTrader 5 first, then retry."
+            ),
         }
 
     def close_positions(

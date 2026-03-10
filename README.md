@@ -65,6 +65,7 @@ This section is for binary users (no source code access needed).
    - Run `Healthcheck All` and confirm both are OK.
 4. Optional: auto-create portable MT5 folders:
    - Open `Auto-Create Portable MT5 Folders (Windows)`.
+   - Source path is auto-detected when possible (falls back to `C:\Program Files\MetaTrader 5`).
    - Set source folder (must contain `terminal64.exe`), target root, and names.
    - Click `Create Portable Folders`.
 5. Go to `Trading` tab:

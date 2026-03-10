@@ -54,6 +54,9 @@ const API = {
   preflight() {
     return this.get('/api/system/preflight');
   },
+  discoverMT5() {
+    return this.get('/api/system/mt5-discover');
+  },
 };
 
 // ── State ──────────────────────────────────────────────────
@@ -242,6 +245,32 @@ $('#portableForm').addEventListener('submit', async e => {
   }
   done();
 });
+
+async function initPortableDefaults() {
+  const sourceInput = $('#portableForm [name="source_dir"]');
+  const hint = $('#portableHint');
+  if (!sourceInput) return;
+  if (!sourceInput.value) {
+    sourceInput.value = 'C:\\Program Files\\MetaTrader 5';
+  }
+  try {
+    const res = await API.discoverMT5();
+    if (res.default_source_dir) {
+      sourceInput.value = res.default_source_dir;
+    }
+    if (hint) {
+      if (res.install_required) {
+        hint.textContent = 'MT5 not detected. Please install MetaTrader 5, then retry auto-create.';
+      } else {
+        hint.textContent = `Detected ${res.count} terminal path(s). Auto-filled source path.`;
+      }
+    }
+  } catch (err) {
+    if (hint) {
+      hint.textContent = 'Could not auto-detect MT5. Using default path.';
+    }
+  }
+}
 
 $('#healthcheckAllBtn').addEventListener('click', async function () {
   const done = showSpinner(this);
@@ -846,6 +875,7 @@ if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistoryMiniO
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {
   await loadAccounts();
+  await initPortableDefaults();
   refreshLicense();
   refreshLogs();
   connectWS();

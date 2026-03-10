@@ -376,6 +376,17 @@ async def system_preflight() -> dict[str, Any]:
     return {"ok": True, **payload}
 
 
+@app.get("/api/system/mt5-discover")
+async def mt5_discover() -> dict[str, Any]:
+    try:
+        out = await _run_blocking(service.discover_mt5_installations)
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **out}
+
+
 @app.get("/api/license/status", response_model=LicenseStatusResponse)
 def license_status() -> LicenseStatusResponse:
     status = license_manager.status()
