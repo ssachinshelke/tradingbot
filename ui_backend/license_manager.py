@@ -571,9 +571,16 @@ class LicenseManager:
         trial["last_trusted_utc"] = trusted_utc if trusted_utc is not None else trial.get("last_trusted_utc")
         trial["usage_counter"] = next_counter
         trial["chain_head"] = next_chain
-        self._save_trial_state(trial)
-        # Ensure secondary anchors remain consistent.
-        self._validate_anchor_integrity(trial)
+        try:
+            self._save_trial_state(trial)
+            # Ensure secondary anchors remain consistent.
+            self._validate_anchor_integrity(trial)
+        except Exception as exc:
+            return LicenseStatus(
+                status="license_invalid",
+                machine_id=self.machine_id,
+                error=str(exc),
+            )
 
         days_left = max((expires - ref_now).days, 0)
         return LicenseStatus(

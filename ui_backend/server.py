@@ -38,7 +38,7 @@ from .api_models import (
     QuickMultiOrderRequest,
     QuickMultiOrderResponse,
 )
-from .license_manager import LicenseManager
+from .license_manager import LicenseManager, LicenseStatus
 from .service import TradingUIService
 
 
@@ -389,7 +389,15 @@ def system_logs(limit: int = 20) -> dict[str, Any]:
 
 @app.get("/api/system/preflight")
 async def system_preflight() -> dict[str, Any]:
-    lic = license_manager.status()
+    try:
+        lic = license_manager.status()
+    except Exception as exc:
+        # Preflight must never 500 on license state persistence/IO errors.
+        lic = LicenseStatus(
+            status="license_invalid",
+            machine_id=license_manager.machine_id,
+            error=str(exc),
+        )
     try:
         payload = await _run_blocking(
             service.get_preflight_report,
