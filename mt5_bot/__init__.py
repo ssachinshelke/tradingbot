@@ -19,4 +19,15 @@ def _mt5_version_hint() -> str:
 try:
     import MetaTrader5 as mt5  # type: ignore  # noqa: F401
 except ModuleNotFoundError as exc:
-    raise RuntimeError(_mt5_version_hint()) from exc
+    class _MT5Unavailable:
+        """Import-time fallback so packaging can proceed on non-Windows CI."""
+
+        _hint = _mt5_version_hint()
+
+        def __getattr__(self, name: str):  # noqa: ANN001
+            # Allow constant lookups at import time (TIMEFRAME_*, ORDER_*, etc.)
+            if name.isupper():
+                return 0
+            raise RuntimeError(self._hint)
+
+    mt5 = _MT5Unavailable()  # type: ignore[assignment]

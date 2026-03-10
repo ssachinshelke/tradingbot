@@ -13,6 +13,11 @@ jobs:
   build-windows:
     name: Build Windows Bundle
     runs-on: windows-latest
+    env:
+      MT5_LOGIN: "10000001"
+      MT5_PASSWORD: "ci-placeholder"
+      MT5_SERVER: "MetaQuotes-Demo"
+      LICENSE_PUBLIC_KEY_B64: "ci-placeholder"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +44,11 @@ jobs:
   build-macos:
     name: Build macOS Bundle
     runs-on: macos-latest
+    env:
+      MT5_LOGIN: "10000001"
+      MT5_PASSWORD: "ci-placeholder"
+      MT5_SERVER: "MetaQuotes-Demo"
+      LICENSE_PUBLIC_KEY_B64: "ci-placeholder"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

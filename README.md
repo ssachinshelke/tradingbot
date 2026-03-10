@@ -337,6 +337,10 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
+Note for macOS:
+- CI can build/package the macOS binary bundle.
+- MetaTrader5 Python integration is Windows-first, so actual live MT5 trading features depend on MT5 runtime availability.
+
 ---
 
 ## 11) Requirements

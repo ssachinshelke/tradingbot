@@ -8,7 +8,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "Installing build dependencies..."
-"$PYTHON_BIN" -m pip install -r requirements.txt
+"$PYTHON_BIN" -m pip install --upgrade pip
+# MetaTrader5 wheel is Windows-only; skip it on macOS build hosts.
+"$PYTHON_BIN" -m pip install python-dotenv numpy fastapi "uvicorn[standard]" pydantic cryptography
 "$PYTHON_BIN" -m pip install pyinstaller
 
 echo "Building Tradingm5UI binary (macOS)..."
