@@ -298,16 +298,20 @@ class TradingUIService:
             "total_profit": round(total_profit, 2),
         }
 
-    def get_closed_deals(
+    def get_deals_history(
         self,
         account_name: str | None,
         days: int = 7,
         limit: int = 300,
+        mode: str = "closed",
     ) -> list[dict[str, Any]]:
         days_safe = max(1, min(int(days), 365))
         limit_safe = max(1, min(int(limit), 2000))
         to_dt = datetime.now(timezone.utc)
         from_dt = to_dt - timedelta(days=days_safe)
+        mode_safe = (mode or "closed").strip().lower()
+        if mode_safe not in {"closed", "all"}:
+            mode_safe = "closed"
 
         accounts = self._load_accounts()
         if account_name:
@@ -331,7 +335,7 @@ class TradingUIService:
                     # Keep all non-entry deals (OUT / OUT_BY / INOUT etc.) to avoid
                     # missing broker-specific close entry codes.
                     entry = int(getattr(d, "entry", -1))
-                    if entry == deal_entry_in:
+                    if mode_safe == "closed" and entry == deal_entry_in:
                         continue
                     t = int(getattr(d, "time", 0) or 0)
                     t_msc = int(getattr(d, "time_msc", 0) or 0)
@@ -359,6 +363,7 @@ class TradingUIService:
                             "swap": float(getattr(d, "swap", 0.0) or 0.0),
                             "commission": float(getattr(d, "commission", 0.0) or 0.0),
                             "comment": str(getattr(d, "comment", "") or ""),
+                            "entry_type": entry,
                             "executed_at_utc": ts,
                         }
                     )
@@ -369,7 +374,11 @@ class TradingUIService:
                     pass
 
         rows.sort(key=lambda r: r.get("executed_at_utc") or "", reverse=True)
-        journal_rows = self._load_closed_journal(account_name=account_name, from_dt=from_dt)
+        journal_rows = (
+            self._load_closed_journal(account_name=account_name, from_dt=from_dt)
+            if mode_safe in {"closed", "all"}
+            else []
+        )
         rows.extend(journal_rows)
         deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -384,6 +393,20 @@ class TradingUIService:
             seen.add(key)
             deduped.append(row)
         return deduped[:limit_safe]
+
+    def get_closed_deals(
+        self,
+        account_name: str | None,
+        days: int = 7,
+        limit: int = 300,
+    ) -> list[dict[str, Any]]:
+        """Backward-compatible wrapper for old endpoint callers."""
+        return self.get_deals_history(
+            account_name=account_name,
+            days=days,
+            limit=limit,
+            mode="closed",
+        )
 
     def get_log_files(self, limit: int = 20) -> list[dict[str, Any]]:
         logs_dir = Path("logs")

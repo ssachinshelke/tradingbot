@@ -40,9 +40,10 @@ const API = {
   },
   licenseStatus()         { return this.get('/api/license/status'); },
   activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
-  closedHistory(accountName = '', days = 7, limit = 300) {
+  closedHistory(accountName = '', days = 7, limit = 300, mode = 'closed') {
     const params = new URLSearchParams({ days: String(days), limit: String(limit) });
     if (accountName) params.set('account_name', accountName);
+    params.set('mode', mode);
     return this.get(`/api/history/closed?${params.toString()}`);
   },
   systemLogs(limit = 20) {
@@ -602,16 +603,21 @@ $('#cancelAllPendingBtn').addEventListener('click', async function () {
 
 async function refreshHistory() {
   const account = $('#historyAccount')?.value || '';
+  const mode = $('#historyMode')?.value || 'all';
   const daysRaw = Number($('#historyDays')?.value || 7);
   const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(daysRaw, 365)) : 7;
   $('#historyStatus').textContent = 'Loading...';
   try {
-    const res = await API.closedHistory(account, days, 2000);
+    const res = await API.closedHistory(account, days, 2000, mode);
     const tbody = $('#historyTable tbody');
     tbody.innerHTML = '';
     for (const item of (res.items || [])) {
       const tr = document.createElement('tr');
       const profit = Number(item.profit || 0);
+      const entryType = Number(item.entry_type);
+      const entryLabel = Number.isFinite(entryType)
+        ? (entryType === 0 ? 'IN' : (entryType === 1 ? 'OUT' : (entryType === 2 ? 'INOUT' : (entryType === 3 ? 'OUT_BY' : String(entryType)))))
+        : '';
       tr.innerHTML = `
         <td>${item.executed_at_utc || ''}</td>
         <td>${esc(item.account)}</td>
@@ -620,6 +626,7 @@ async function refreshHistory() {
         <td>${item.position_id}</td>
         <td>${esc(item.symbol)}</td>
         <td>${item.side}</td>
+        <td>${entryLabel}</td>
         <td>${item.volume}</td>
         <td>${item.price}</td>
         <td class="${profitClass(profit)}">${profit.toFixed(2)}</td>
@@ -627,7 +634,7 @@ async function refreshHistory() {
       `;
       tbody.appendChild(tr);
     }
-    $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows`;
+    $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows (${mode})`;
     renderHistoryMini((res.items || []).slice(0, 100));
   } catch (err) {
     $('#historyStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
@@ -666,7 +673,7 @@ async function refreshHistoryMiniOnly() {
   const status = $('#historyMiniStatus');
   if (status) status.textContent = 'Loading...';
   try {
-    const res = await API.closedHistory('', 7, 2000);
+    const res = await API.closedHistory('', 7, 2000, 'closed');
     renderHistoryMini((res.items || []).slice(0, 100));
   } catch (err) {
     if (status) status.textContent = `Error: ${err.detail || err.message || String(err)}`;

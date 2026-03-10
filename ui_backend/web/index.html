@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260310-5">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310-6">
 </head>
 <body>
   <header class="topbar">
@@ -126,7 +126,11 @@
       <select id="historyAccount">
         <option value="">All Accounts</option>
       </select>
-      <input id="historyDays" type="number" min="1" max="365" value="7" style="width:90px">
+      <select id="historyMode" style="width:150px">
+        <option value="all">All Executions</option>
+        <option value="closed">Closed Only</option>
+      </select>
+      <input id="historyDays" type="number" min="1" max="365" value="1" style="width:90px">
       <button id="refreshHistoryBtn" class="btn-sm btn-accent">Refresh History</button>
       <span id="historyStatus" class="status-text"></span>
     </div>
@@ -134,7 +138,7 @@
       <thead>
         <tr>
           <th>Exec Time (UTC)</th><th>Account</th><th>Deal</th><th>Order</th><th>Position</th>
-          <th>Symbol</th><th>Side</th><th>Vol</th><th>Price</th><th>Profit</th><th>Comment</th>
+          <th>Symbol</th><th>Side</th><th>Entry</th><th>Vol</th><th>Price</th><th>Profit</th><th>Comment</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -164,6 +168,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-5"></script>
+  <script src="/ui/app.js?v=20260310-6"></script>
 </body>
 </html>

@@ -318,19 +318,21 @@ async def closed_history(
     account_name: str | None = None,
     days: int = 7,
     limit: int = 300,
+    mode: str = "closed",
 ) -> dict[str, Any]:
     try:
         rows = await _run_blocking(
-            service.get_closed_deals,
+            service.get_deals_history,
             account_name=account_name,
             days=days,
             limit=limit,
+            mode=mode,
         )
     except asyncio.CancelledError as exc:
         raise HTTPException(status_code=503, detail="Server shutting down") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True, "count": len(rows), "items": rows}
+    return {"ok": True, "count": len(rows), "mode": mode, "items": rows}
 
 
 @app.get("/api/system/logs")
