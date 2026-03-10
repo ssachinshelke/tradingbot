@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-project_root = Path(__file__).resolve().parent.parent
+# In PyInstaller spec execution, __file__ may be unset on some CI runners.
+# The build scripts cd to repo root before invoking this spec.
+project_root = Path.cwd().resolve()
 web_dir = project_root / "ui_backend" / "web"
 
 datas = [

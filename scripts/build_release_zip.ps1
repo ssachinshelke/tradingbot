@@ -8,6 +8,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+Write-Host "Installing build dependencies..."
+& $Python -m pip install --upgrade pip
+& $Python -m pip install -r requirements.txt
+& $Python -m pip install pyinstaller
+
 Write-Host "Building executable..."
 & $Python -m PyInstaller --clean --noconfirm "packaging/tradingm5_ui.spec"
 
@@ -21,7 +26,11 @@ $bundleName = "Tradingm5UI_${Version}_${stamp}"
 $bundleDir = Join-Path $releaseDir $bundleName
 New-Item -ItemType Directory -Path $bundleDir | Out-Null
 
-Copy-Item "dist\Tradingm5UI.exe" -Destination (Join-Path $bundleDir "Tradingm5UI.exe")
+$exePath = Join-Path $root "dist\Tradingm5UI.exe"
+if (!(Test-Path $exePath)) {
+    throw "Build finished but executable not found at: $exePath"
+}
+Copy-Item $exePath -Destination (Join-Path $bundleDir "Tradingm5UI.exe")
 if (Test-Path "scripts\start_ui.bat") {
     Copy-Item "scripts\start_ui.bat" -Destination (Join-Path $bundleDir "start_ui.bat")
 }
