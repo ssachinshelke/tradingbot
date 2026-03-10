@@ -153,7 +153,10 @@ def ping() -> ApiResponse:
 
 @app.get("/api/accounts")
 def get_accounts() -> list[dict[str, Any]]:
-    return service.get_accounts()
+    try:
+        return service.get_accounts()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/accounts")

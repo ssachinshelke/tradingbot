@@ -16,7 +16,6 @@ from mt5_bot import mt5
 from mt5_bot.advanced_plan import execute_advanced_order_plan, parse_advanced_order_rows
 from mt5_bot.client import TradingBot
 from mt5_bot.config import AccountConfig, BotConfig, load_config
-from mt5_bot.multi import healthcheck_all_accounts
 
 
 def _now_iso() -> str:
@@ -366,12 +365,44 @@ class TradingUIService:
             accounts = [a for a in accounts if a.name in selected]
         if not accounts:
             return []
-        return healthcheck_all_accounts(
-            self.cfg,
-            accounts,
-            symbol=symbol or self.cfg.default_symbol,
-            timeout_seconds=45,
-        )
+        check_symbol = symbol or self.cfg.default_symbol
+        # Frozen Windows builds can be fragile with multiprocessing workers.
+        # Prefer deterministic in-process checks for UI reliability.
+        rows: list[dict[str, Any]] = []
+        for account in accounts:
+            bot = TradingBot(self._make_account_config(self.cfg, account))
+            try:
+                bot.start()
+                snap = bot.client.account_snapshot()
+                bot.client.ensure_symbol(check_symbol)
+                spread = bot.spread_in_pips(check_symbol)
+                rows.append(
+                    {
+                        "name": account.name,
+                        "login": account.mt5_login,
+                        "ok": True,
+                        "server": snap.server,
+                        "balance": snap.balance,
+                        "equity": snap.equity,
+                        "symbol": check_symbol,
+                        "spread_pips": spread,
+                    }
+                )
+            except Exception as exc:
+                rows.append(
+                    {
+                        "name": account.name,
+                        "login": account.mt5_login,
+                        "ok": False,
+                        "error": str(exc),
+                    }
+                )
+            finally:
+                try:
+                    bot.stop()
+                except Exception:
+                    pass
+        return rows
 
     def run_healthcheck_one(self, account_name: str, symbol: str | None) -> dict[str, Any]:
         rows = self.run_healthcheck([account_name], symbol)

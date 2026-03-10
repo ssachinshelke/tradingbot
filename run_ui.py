@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging.config
+import multiprocessing as mp
 from pathlib import Path
 import threading
 import traceback
@@ -62,6 +63,9 @@ def _build_log_config(log_file: Path) -> dict[str, Any]:
 
 
 def main() -> None:
+    # Safety guard: child worker processes must never launch UI/server.
+    if mp.parent_process() is not None:
+        return
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -86,4 +90,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     main()
