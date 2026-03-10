@@ -71,6 +71,16 @@ class WebSocketHub:
             except Exception:
                 await self.disconnect(ws)
 
+    async def close_all(self) -> None:
+        async with self._lock:
+            clients = list(self._clients)
+            self._clients.clear()
+        for ws in clients:
+            try:
+                await ws.close(code=1001, reason="server shutdown")
+            except Exception:
+                pass
+
 
 service = TradingUIService()
 license_manager = LicenseManager()
@@ -118,6 +128,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             await task
         except (asyncio.CancelledError, Exception):
             pass
+        await hub.close_all()
         _pool.shutdown(wait=False)
 
 
