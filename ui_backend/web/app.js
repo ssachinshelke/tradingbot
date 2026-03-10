@@ -17,10 +17,16 @@ const API = {
   deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
   healthcheckAll()        { return this.post('/api/healthcheck', {}); },
   healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
-  submitPlan(rows)        { return this.post('/api/trade/submit-plan', { plan_rows: rows, timeout_seconds: 120, poll_seconds: 1.0 }); },
+  submitPlan(rows)        { return this.post('/api/trade/submit-plan', { plan_rows: rows, timeout_seconds: 30, poll_seconds: 0.5 }); },
   quickMulti(body)        { return this.post('/api/trade/quick-multi', body); },
   getBook()               { return this.get('/api/orders/active'); },
-  closeOrder(account, symbol, side) { return this.post('/api/orders/close', { account, symbol, side }); },
+  closeOrder(account, symbol, side, ticket = null) {
+    const body = { account, symbol, side };
+    if (ticket !== null && ticket !== undefined) {
+      body.ticket = Number(ticket);
+    }
+    return this.post('/api/orders/close', body);
+  },
   licenseStatus()         { return this.get('/api/license/status'); },
   activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
 };
@@ -272,7 +278,7 @@ function renderBook(data) {
     const closing = state.closingSet.has(key);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" class="pos-check" data-key="${key}" data-account="${esc(p.account)}" data-symbol="${esc(p.symbol)}" data-side="${p.side}"${checked}></td>
+      <td><input type="checkbox" class="pos-check" data-key="${key}" data-account="${esc(p.account)}" data-symbol="${esc(p.symbol)}" data-side="${p.side}" data-ticket="${p.ticket}"${checked}></td>
       <td>${esc(p.account)}</td>
       <td>${p.ticket}</td>
       <td>${esc(p.symbol)}</td>
@@ -284,7 +290,7 @@ function renderBook(data) {
       <td>${p.tp || 0}</td>
       <td>${closing
         ? '<span class="spinner"></span>'
-        : `<button class="btn-sm btn-red close-pos" data-account="${esc(p.account)}" data-symbol="${esc(p.symbol)}" data-side="${p.side}">Close</button>`
+        : `<button class="btn-sm btn-red close-pos" data-account="${esc(p.account)}" data-symbol="${esc(p.symbol)}" data-side="${p.side}" data-ticket="${p.ticket}">Close</button>`
       }</td>`;
     posTbody.appendChild(tr);
   }
@@ -326,11 +332,11 @@ $('#positionsTable').addEventListener('change', e => {
 $('#positionsTable').addEventListener('click', async e => {
   const btn = e.target.closest('.close-pos');
   if (!btn) return;
-  const { account, symbol, side } = btn.dataset;
+  const { account, symbol, side, ticket } = btn.dataset;
   const done = showSpinner(btn);
-  $('#closeStatus').textContent = `Closing ${side} ${symbol} on ${account}...`;
+  $('#closeStatus').textContent = `Closing #${ticket} ${side} ${symbol} on ${account}...`;
   try {
-    const res = await API.closeOrder(account, symbol, side);
+    const res = await API.closeOrder(account, symbol, side, ticket);
     $('#closeStatus').textContent = `Closed ${res.closed_count} position(s)`;
   } catch (err) {
     $('#closeStatus').textContent = 'Close failed: ' + (err.detail || err.message || '');
@@ -349,15 +355,21 @@ $('#closeSelectedBtn').addEventListener('click', async function () {
 
   const jobs = new Map();
   for (const cb of checked) {
-    const key = `${cb.dataset.account}|${cb.dataset.symbol}|${cb.dataset.side}`;
+    const key = `${cb.dataset.account}|${cb.dataset.ticket}`;
     if (!jobs.has(key)) {
-      jobs.set(key, { account: cb.dataset.account, symbol: cb.dataset.symbol, side: cb.dataset.side });
+      jobs.set(key, {
+        account: cb.dataset.account,
+        symbol: cb.dataset.symbol,
+        side: cb.dataset.side,
+        ticket: cb.dataset.ticket,
+      });
     }
     state.closingSet.add(cb.dataset.key);
   }
 
   const promises = [...jobs.values()].map(j =>
-    API.closeOrder(j.account, j.symbol, j.side).catch(err => ({ error: err.detail || err.message || String(err) }))
+    API.closeOrder(j.account, j.symbol, j.side, j.ticket)
+      .catch(err => ({ error: err.detail || err.message || String(err) }))
   );
   const results = await Promise.all(promises);
 
@@ -385,15 +397,21 @@ $('#closeAllBtn').addEventListener('click', async function () {
   for (const row of rows) {
     const cb = row.querySelector('.pos-check');
     if (!cb) continue;
-    const key = `${cb.dataset.account}|${cb.dataset.symbol}|${cb.dataset.side}`;
+    const key = `${cb.dataset.account}|${cb.dataset.ticket}`;
     if (!jobs.has(key)) {
-      jobs.set(key, { account: cb.dataset.account, symbol: cb.dataset.symbol, side: cb.dataset.side });
+      jobs.set(key, {
+        account: cb.dataset.account,
+        symbol: cb.dataset.symbol,
+        side: cb.dataset.side,
+        ticket: cb.dataset.ticket,
+      });
     }
     state.closingSet.add(cb.dataset.key);
   }
 
   const promises = [...jobs.values()].map(j =>
-    API.closeOrder(j.account, j.symbol, j.side).catch(err => ({ error: err.detail || err.message || String(err) }))
+    API.closeOrder(j.account, j.symbol, j.side, j.ticket)
+      .catch(err => ({ error: err.detail || err.message || String(err) }))
   );
   const results = await Promise.all(promises);
 

@@ -207,7 +207,14 @@ class TradingUIService:
             "total_profit": round(total_profit, 2),
         }
 
-    def close_positions(self, account_name: str, symbol: str, side: str, volume: float | None) -> dict[str, Any]:
+    def close_positions(
+        self,
+        account_name: str,
+        symbol: str,
+        side: str,
+        volume: float | None,
+        ticket: int | None = None,
+    ) -> dict[str, Any]:
         account = next((a for a in self._load_accounts() if a.name == account_name), None)
         if account is None:
             raise ValueError(f"Unknown account: {account_name}")
@@ -216,6 +223,8 @@ class TradingUIService:
         try:
             bot.start()
             positions = bot.client.positions(symbol=symbol)
+            if ticket is not None:
+                positions = [p for p in positions if int(getattr(p, "ticket", 0)) == int(ticket)]
             if side == "buy":
                 positions = [p for p in positions if int(p.type) == int(mt5.POSITION_TYPE_BUY)]
             elif side == "sell":

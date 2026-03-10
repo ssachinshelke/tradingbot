@@ -25,6 +25,23 @@ def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _to_picklable(value: Any) -> Any:
+    """Convert nested values to queue-safe primitives for multiprocessing."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            out[str(k)] = _to_picklable(v)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [_to_picklable(v) for v in value]
+    if isinstance(value, set):
+        return [_to_picklable(v) for v in sorted(value, key=lambda x: str(x))]
+    # MT5 namedtuples/classes or any custom objects end here.
+    return str(value)
+
+
 @dataclass(frozen=True)
 class StepPlan:
     action: str
@@ -610,7 +627,7 @@ def _account_workflows_worker(
             default_timeout_seconds=timeout_seconds,
         )
         result["row_index"] = row_index
-        queue.put(result)
+        queue.put(_to_picklable(result))
 
 
 def execute_advanced_order_plan(

@@ -184,13 +184,16 @@ async def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
     lic = license_manager.status()
     if lic.status in ("trial_expired", "license_invalid"):
         raise HTTPException(status_code=403, detail=lic.error or "License invalid")
-    payload = await _run_blocking(
-        service.submit_plan,
-        plan_rows=req.plan_rows,
-        timeout_seconds=req.timeout_seconds,
-        poll_seconds=req.poll_seconds,
-        request_id=req.request_id,
-    )
+    try:
+        payload = await _run_blocking(
+            service.submit_plan,
+            plan_rows=req.plan_rows,
+            timeout_seconds=req.timeout_seconds,
+            poll_seconds=req.poll_seconds,
+            request_id=req.request_id,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
     return PlanSubmitResponse(
         ok=True,
         request_id=payload["request_id"],
@@ -203,20 +206,23 @@ async def quick_multi(req: QuickMultiOrderRequest) -> QuickMultiOrderResponse:
     lic = license_manager.status()
     if lic.status in ("trial_expired", "license_invalid"):
         raise HTTPException(status_code=403, detail=lic.error or "License invalid")
-    payload = await _run_blocking(
-        service.quick_multi_order,
-        accounts=req.accounts,
-        symbol=req.symbol,
-        side=req.side,
-        volume=req.volume,
-        trigger_price=req.trigger_price,
-        sl_price=req.sl_price,
-        tp_price=req.tp_price,
-        comment=req.comment,
-        timeout_seconds=req.timeout_seconds,
-        poll_seconds=req.poll_seconds,
-        request_id=req.request_id,
-    )
+    try:
+        payload = await _run_blocking(
+            service.quick_multi_order,
+            accounts=req.accounts,
+            symbol=req.symbol,
+            side=req.side,
+            volume=req.volume,
+            trigger_price=req.trigger_price,
+            sl_price=req.sl_price,
+            tp_price=req.tp_price,
+            comment=req.comment,
+            timeout_seconds=req.timeout_seconds,
+            poll_seconds=req.poll_seconds,
+            request_id=req.request_id,
+        )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
     return QuickMultiOrderResponse(
         ok=True,
         request_id=payload["request_id"],
@@ -227,7 +233,10 @@ async def quick_multi(req: QuickMultiOrderRequest) -> QuickMultiOrderResponse:
 
 @app.get("/api/orders/active", response_model=ActiveBookResponse)
 async def active_orders() -> ActiveBookResponse:
-    data = await _run_blocking(service.get_active_book)
+    try:
+        data = await _run_blocking(service.get_active_book)
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
     return ActiveBookResponse(
         ok=True,
         positions=data["positions"],
@@ -248,7 +257,10 @@ async def close_order(req: CloseRequest) -> CloseResponse:
             symbol=req.symbol,
             side=req.side,
             volume=req.volume,
+            ticket=req.ticket,
         )
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return CloseResponse(ok=True, **out)

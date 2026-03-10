@@ -120,6 +120,7 @@ class CloseRequest(BaseModel):
     symbol: str
     side: Literal["buy", "sell", "all"] = "all"
     volume: float | None = None
+    ticket: int | None = None
 
 
 class CloseResponse(ApiResponse):
