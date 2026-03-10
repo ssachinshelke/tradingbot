@@ -40,7 +40,10 @@ class TradingUIService:
         self.cfg: BotConfig = load_config()
         self._accounts_file = Path(self.cfg.accounts_file)
         self._req_lock = Lock()
+        self._journal_lock = Lock()
         self._request_cache: dict[str, dict[str, Any]] = {}
+        self._closed_journal_path = Path("logs") / "closed_deals_journal.jsonl"
+        self._closed_journal_path.parent.mkdir(parents=True, exist_ok=True)
 
     def _load_accounts(self) -> list[AccountConfig]:
         return load_accounts(str(self._accounts_file))
@@ -362,7 +365,21 @@ class TradingUIService:
                     pass
 
         rows.sort(key=lambda r: r.get("executed_at_utc") or "", reverse=True)
-        return rows[:limit_safe]
+        journal_rows = self._load_closed_journal(account_name=account_name, from_dt=from_dt)
+        rows.extend(journal_rows)
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for row in sorted(rows, key=lambda r: r.get("executed_at_utc") or "", reverse=True):
+            key = (
+                f"{row.get('account','')}|{row.get('deal_ticket',0)}|"
+                f"{row.get('order_ticket',0)}|{row.get('position_id',0)}|"
+                f"{row.get('executed_at_utc','')}"
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(row)
+        return deduped[:limit_safe]
 
     def get_log_files(self, limit: int = 20) -> list[dict[str, Any]]:
         logs_dir = Path("logs")
@@ -412,18 +429,71 @@ class TradingUIService:
                 req_volume = volume if volume is not None else None
                 if req_volume is not None and req_volume > float(p.volume):
                     req_volume = float(p.volume)
+                position_id = int(getattr(p, "ticket", 0) or 0)
                 result = bot.client.close_position(
                     p,
                     volume=req_volume,
                     comment="ui-close",
                 )
-                closed.append(
+                retcode = int(result.get("retcode", 0) or 0)
+                deal_ticket = int(result.get("deal", 0) or 0)
+                detail: dict[str, Any] = {
+                    "ticket": int(p.ticket),
+                    "retcode": retcode,
+                    "deal": deal_ticket,
+                    "order": result.get("order"),
+                }
+                # Enrich response from deal history if available.
+                if deal_ticket > 0:
+                    try:
+                        deal_rows = bot.client.history_deals(ticket=deal_ticket)
+                        if deal_rows:
+                            d = deal_rows[0]
+                            d_time = int(getattr(d, "time", 0) or 0)
+                            detail["profit"] = float(getattr(d, "profit", 0.0) or 0.0)
+                            detail["price"] = float(getattr(d, "price", 0.0) or 0.0)
+                            detail["volume"] = float(getattr(d, "volume", 0.0) or 0.0)
+                            detail["executed_at_utc"] = (
+                                datetime.fromtimestamp(d_time, tz=timezone.utc).isoformat() if d_time > 0 else _now_iso()
+                            )
+                            detail["position_id"] = int(getattr(d, "position_id", position_id) or position_id)
+                    except Exception:
+                        pass
+
+                if "executed_at_utc" not in detail:
+                    detail["executed_at_utc"] = _now_iso()
+                if "position_id" not in detail:
+                    detail["position_id"] = position_id
+                if "volume" not in detail:
+                    detail["volume"] = float(req_volume if req_volume is not None else float(p.volume))
+                if "price" not in detail:
+                    detail["price"] = float(getattr(p, "price_current", 0.0) or getattr(p, "price_open", 0.0) or 0.0)
+                if "profit" not in detail:
+                    detail["profit"] = 0.0
+
+                # Persist instant closed-deal journal for UI visibility even when broker history lags.
+                self._append_closed_journal(
                     {
-                        "ticket": int(p.ticket),
-                        "retcode": result.get("retcode"),
-                        "deal": result.get("deal"),
-                        "order": result.get("order"),
+                        "account": account_name,
+                        "login": account.mt5_login,
+                        "deal_ticket": int(detail.get("deal", 0) or 0),
+                        "order_ticket": int(detail.get("order", 0) or 0),
+                        "position_id": int(detail.get("position_id", position_id) or position_id),
+                        "symbol": symbol,
+                        "side": side,
+                        "volume": float(detail.get("volume", 0.0) or 0.0),
+                        "price": float(detail.get("price", 0.0) or 0.0),
+                        "profit": float(detail.get("profit", 0.0) or 0.0),
+                        "swap": 0.0,
+                        "commission": 0.0,
+                        "comment": "ui-close",
+                        "executed_at_utc": str(detail.get("executed_at_utc") or _now_iso()),
+                        "source": "close_api",
                     }
+                )
+
+                closed.append(
+                    detail
                 )
         finally:
             try:
@@ -436,6 +506,48 @@ class TradingUIService:
             "closed_count": len(closed),
             "details": closed,
         }
+
+    def _append_closed_journal(self, row: dict[str, Any]) -> None:
+        try:
+            line = json.dumps(row, separators=(",", ":"))
+            with self._journal_lock:
+                with self._closed_journal_path.open("a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+        except Exception:
+            # Non-blocking journal best effort.
+            pass
+
+    def _load_closed_journal(self, account_name: str | None, from_dt: datetime) -> list[dict[str, Any]]:
+        if not self._closed_journal_path.exists():
+            return []
+        out: list[dict[str, Any]] = []
+        try:
+            with self._journal_lock:
+                lines = self._closed_journal_path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return out
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if account_name and str(row.get("account", "")) != account_name:
+                continue
+            ts_raw = str(row.get("executed_at_utc", "") or "")
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except Exception:
+                continue
+            if ts < from_dt:
+                continue
+            out.append(row)
+        return out
 
     def cancel_pending_order(self, account_name: str, ticket: int) -> dict[str, Any]:
         account = next((a for a in self._load_accounts() if a.name == account_name), None)
