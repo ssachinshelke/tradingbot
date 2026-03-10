@@ -197,6 +197,17 @@ async def symbols_for_account(account_name: str, q: str | None = None, limit: in
     return {"ok": True, "account": account_name, "count": len(items), "items": items}
 
 
+@app.get("/api/symbols/validate/{account_name}")
+async def validate_symbol(account_name: str, symbol: str) -> dict[str, Any]:
+    try:
+        out = await _run_blocking(service.validate_symbol, account_name=account_name, symbol=symbol)
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return out
+
+
 @app.post("/api/trade/submit-plan", response_model=PlanSubmitResponse)
 async def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
     lic = license_manager.status()

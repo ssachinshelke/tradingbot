@@ -21,6 +21,10 @@ const API = {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     return this.get(`/api/symbols/${encodeURIComponent(account)}?${params.toString()}`);
   },
+  validateSymbol(account, symbol) {
+    const params = new URLSearchParams({ symbol });
+    return this.get(`/api/symbols/validate/${encodeURIComponent(account)}?${params.toString()}`);
+  },
   submitPlan(rows)        { return this.post('/api/trade/submit-plan', { plan_rows: rows, timeout_seconds: 30, poll_seconds: 0.5 }); },
   quickMulti(body)        { return this.post('/api/trade/quick-multi', body); },
   getBook()               { return this.get('/api/orders/active'); },
@@ -242,7 +246,17 @@ $('#orderRows').addEventListener('click', e => {
           opt.label = item.description ? `${item.name} - ${item.description}` : item.name;
           dl.appendChild(opt);
         }
-        setResult('tradingResult', { ok: true, account, symbols_found: (res.items || []).length, query: q });
+        const count = (res.items || []).length;
+        if (count === 0) {
+          setResult('tradingResult', {
+            ok: false,
+            account,
+            query: q,
+            error: 'No symbols found. Use exact broker symbol name (e.g. EURUSD / EURUSDm / XAUUSD).',
+          });
+          return;
+        }
+        setResult('tradingResult', { ok: true, account, symbols_found: count, query: q });
       })
       .catch((err) => {
         setResult('tradingResult', { ok: false, error: err.detail || err.message || String(err) });
@@ -281,27 +295,30 @@ $('#submitAllOrdersBtn').addEventListener('click', async function () {
   const rows = collectOrderRows();
   if (!rows.length) { setResult('tradingResult', 'Add at least one valid order row.'); return; }
   const done = showSpinner(this);
-  setResult('tradingResult', 'Submitting orders in parallel...');
+  setResult('tradingResult', 'Validating symbols...');
   try {
+    const validations = await Promise.all(
+      rows.map(r =>
+        API.validateSymbol(r.account, r.symbol).catch(err => ({
+          ok: false,
+          account: r.account,
+          symbol: r.symbol,
+          error: err.detail || err.message || String(err),
+        }))
+      )
+    );
+    const invalid = validations.filter(v => !v.ok);
+    if (invalid.length > 0) {
+      setResult('tradingResult', { ok: false, error: 'Invalid symbols found', invalid });
+      done();
+      return;
+    }
+
+    setResult('tradingResult', 'Submitting orders in parallel...');
     const res = await API.submitPlan(rows);
     setResult('tradingResult', res);
   } catch (err) {
     setResult('tradingResult', { error: err.detail || err.message || JSON.stringify(err) });
-  }
-  done();
-});
-
-$('#submitJsonPlanBtn').addEventListener('click', async function () {
-  const raw = $('#planJson').value.trim();
-  if (!raw) { setResult('jsonPlanResult', 'Enter JSON plan.'); return; }
-  let parsed;
-  try { parsed = JSON.parse(raw); } catch (e) { setResult('jsonPlanResult', 'Invalid JSON: ' + e.message); return; }
-  const done = showSpinner(this);
-  try {
-    const res = await API.submitPlan(parsed);
-    setResult('jsonPlanResult', res);
-  } catch (err) {
-    setResult('jsonPlanResult', { error: err.detail || err.message || JSON.stringify(err) });
   }
   done();
 });
@@ -437,7 +454,6 @@ $('#positionsTable').addEventListener('click', async e => {
 $('#closeSelectedBtn').addEventListener('click', async function () {
   const checked = $$('#positionsTable tbody .pos-check:checked');
   if (!checked.length) return;
-  if (!confirm(`Close ${checked.length} selected position(s)?`)) return;
 
   const done = showSpinner(this);
   $('#closeStatus').textContent = `Closing ${checked.length} position(s)...`;
@@ -477,7 +493,6 @@ $('#closeSelectedBtn').addEventListener('click', async function () {
 $('#closeAllBtn').addEventListener('click', async function () {
   const rows = $$('#positionsTable tbody tr');
   if (!rows.length) { $('#closeStatus').textContent = 'No open positions.'; return; }
-  if (!confirm(`Close ALL ${rows.length} open position(s)?`)) return;
 
   const done = showSpinner(this);
   $('#closeStatus').textContent = `Closing all ${rows.length} position(s)...`;
@@ -533,7 +548,6 @@ $('#ordersTable').addEventListener('click', async e => {
 $('#cancelSelectedPendingBtn').addEventListener('click', async function () {
   const checked = $$('#ordersTable tbody .pending-check:checked');
   if (!checked.length) return;
-  if (!confirm(`Cancel ${checked.length} selected pending order(s)?`)) return;
 
   const done = showSpinner(this);
   $('#pendingStatus').textContent = `Cancelling ${checked.length} pending order(s)...`;
@@ -560,7 +574,6 @@ $('#cancelAllPendingBtn').addEventListener('click', async function () {
     $('#pendingStatus').textContent = 'No pending orders.';
     return;
   }
-  if (!confirm(`Cancel ALL ${checks.length} pending order(s)?`)) return;
   const done = showSpinner(this);
   $('#pendingStatus').textContent = `Cancelling all ${checks.length} pending order(s)...`;
 
@@ -609,8 +622,35 @@ async function refreshHistory() {
       tbody.appendChild(tr);
     }
     $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows`;
+    renderHistoryMini((res.items || []).slice(0, 50));
   } catch (err) {
     $('#historyStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
+  }
+}
+
+function renderHistoryMini(items) {
+  const tbody = $('#historyMiniTable tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  let total = 0;
+  for (const item of items) {
+    const profit = Number(item.profit || 0);
+    total += profit;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${item.executed_at_utc || ''}</td>
+      <td>${esc(item.account)}</td>
+      <td>${esc(item.symbol)}</td>
+      <td>${item.side}</td>
+      <td>${item.volume}</td>
+      <td>${item.price}</td>
+      <td class="${profitClass(profit)}">${profit.toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  const status = $('#historyMiniStatus');
+  if (status) {
+    status.textContent = `Rows: ${items.length}, Total P/L: ${total.toFixed(2)}`;
   }
 }
 
@@ -677,6 +717,8 @@ $('#activateLicenseBtn').addEventListener('click', async function () {
 $('#refreshLicenseBtn').addEventListener('click', refreshLicense);
 $('#refreshHistoryBtn').addEventListener('click', refreshHistory);
 $('#refreshLogsBtn').addEventListener('click', refreshLogs);
+const historyMiniBtn = $('#refreshHistoryMiniBtn');
+if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistory);
 
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {

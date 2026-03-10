@@ -114,7 +114,12 @@ class TradingUIService:
         max_items = max(1, min(int(limit), 200))
         try:
             bot.start()
-            symbols = bot.client.symbols_get()
+            if q:
+                symbols = bot.client.symbols_get(group=f"*{q}*")
+                if not symbols:
+                    symbols = bot.client.symbols_get()
+            else:
+                symbols = bot.client.symbols_get()
         finally:
             try:
                 bot.stop()
@@ -143,6 +148,23 @@ class TradingUIService:
         else:
             matched.sort(key=lambda row: row["name"])
         return matched[:max_items]
+
+    def validate_symbol(self, account_name: str, symbol: str) -> dict[str, Any]:
+        account = next((a for a in self._load_accounts() if a.name == account_name), None)
+        if account is None:
+            return {"ok": False, "account": account_name, "symbol": symbol, "error": "Unknown account"}
+        bot = TradingBot(self._make_account_config(self.cfg, account))
+        try:
+            bot.start()
+            bot.client.ensure_symbol(symbol)
+            return {"ok": True, "account": account_name, "symbol": symbol}
+        except Exception as exc:
+            return {"ok": False, "account": account_name, "symbol": symbol, "error": str(exc)}
+        finally:
+            try:
+                bot.stop()
+            except Exception:
+                pass
 
     def upsert_account(self, payload: dict[str, Any]) -> dict[str, Any]:
         accounts = self._load_accounts()

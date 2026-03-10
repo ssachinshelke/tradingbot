@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310-3">
 </head>
 <body>
   <header class="topbar">
@@ -43,12 +43,7 @@
     </div>
     <div class="result-box" id="tradingResult"></div>
 
-    <details class="advanced-json">
-      <summary>Advanced: Raw JSON Plan</summary>
-      <textarea id="planJson" rows="10" placeholder='[{"account":"account-1","symbol":"EURUSD","side":"buy","volume":0.1}]'></textarea>
-      <button id="submitJsonPlanBtn" class="btn-sm btn-accent">Submit JSON Plan</button>
-      <div class="result-box" id="jsonPlanResult"></div>
-    </details>
+    <p class="sub">Advanced JSON plan is available via API endpoint: <code>/api/trade/submit-plan</code></p>
   </section>
 
   <!-- ─── ACCOUNTS TAB ────────────────────────────────────── -->
@@ -105,6 +100,20 @@
       <thead><tr><th><input type="checkbox" id="selectAllPending"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>SL</th><th>TP</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
+
+    <h3 style="margin-top:12px">Closed Deals (Last 7 Days)</h3>
+    <div class="book-toolbar">
+      <button id="refreshHistoryMiniBtn" class="btn-sm btn-accent">Refresh Closed P/L</button>
+      <span id="historyMiniStatus" class="status-text"></span>
+    </div>
+    <table id="historyMiniTable" class="tbl">
+      <thead>
+        <tr>
+          <th>Exec Time (UTC)</th><th>Account</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Price</th><th>Profit</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </section>
 
   <!-- ─── HISTORY TAB ─────────────────────────────────────── -->
@@ -155,6 +164,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js"></script>
+  <script src="/ui/app.js?v=20260310-3"></script>
 </body>
 </html>
