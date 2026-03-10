@@ -1,252 +1,357 @@
-const api = {
-  getAccounts: () => fetch("/api/accounts").then(r => r.json()),
-  upsertAccount: (body) => fetch("/api/accounts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  }).then(r => r.json()),
-  deleteAccount: (name) => fetch(`/api/accounts/${encodeURIComponent(name)}`, { method: "DELETE" }).then(r => r.json()),
-  healthcheckAll: () => fetch("/api/healthcheck", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({})
-  }).then(r => r.json()),
-  healthcheckOne: (name) => fetch(`/api/healthcheck/${encodeURIComponent(name)}`).then(r => r.json()),
-  submitPlan: (planRows) => fetch("/api/trade/submit-plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan_rows: planRows, timeout_seconds: 3600, poll_seconds: 1.0 })
-  }).then(r => r.json()),
-  quickMulti: (body) => fetch("/api/trade/quick-multi", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  }).then(r => r.json()),
-  getBook: () => fetch("/api/orders/active").then(r => r.json()),
-  closeOrder: (account, symbol, side) => fetch("/api/orders/close", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ account, symbol, side })
-  }).then(r => r.json()),
-  licenseStatus: () => fetch("/api/license/status").then(r => r.json()),
-  activateLicense: (path) => fetch("/api/license/activate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ license_key_path: path })
-  }).then(r => r.json())
+/* ════════════════════════════════════════════════════════════
+   Tradingm5 Dashboard – single-file client
+   ════════════════════════════════════════════════════════════ */
+
+// ── API layer ──────────────────────────────────────────────
+const API = {
+  _json(r) {
+    if (!r.ok) return r.json().then(d => { throw d; });
+    return r.json();
+  },
+  get(url)       { return fetch(url).then(this._json); },
+  post(url, body){ return fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).then(this._json); },
+  del(url)       { return fetch(url, { method:'DELETE' }).then(this._json); },
+
+  getAccounts()           { return this.get('/api/accounts'); },
+  upsertAccount(p)        { return this.post('/api/accounts', p); },
+  deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
+  healthcheckAll()        { return this.post('/api/healthcheck', {}); },
+  healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
+  submitPlan(rows)        { return this.post('/api/trade/submit-plan', { plan_rows: rows, timeout_seconds: 3600, poll_seconds: 1.0 }); },
+  quickMulti(body)        { return this.post('/api/trade/quick-multi', body); },
+  getBook()               { return this.get('/api/orders/active'); },
+  closeOrder(account, symbol, side) { return this.post('/api/orders/close', { account, symbol, side }); },
+  licenseStatus()         { return this.get('/api/license/status'); },
+  activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
 };
 
+// ── State ──────────────────────────────────────────────────
 const state = {
-  healthByAccount: {}
+  accounts: [],
+  healthMap: {},
+  orderRowId: 0,
 };
 
-function setText(id, value) {
-  document.getElementById(id).textContent = value;
+// ── Helpers ────────────────────────────────────────────────
+const $ = (sel, ctx = document) => ctx.querySelector(sel);
+const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+function setResult(id, v) { const el = document.getElementById(id); if (el) el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2); }
+
+function profitClass(val) {
+  const n = Number(val);
+  if (n > 0) return 'profit-pos';
+  if (n < 0) return 'profit-neg';
+  return '';
 }
 
-function setJson(id, value) {
-  document.getElementById(id).textContent = JSON.stringify(value, null, 2);
+function showSpinner(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = orig + '<span class="spinner"></span>';
+  return () => { btn.disabled = false; btn.innerHTML = orig; };
 }
 
-async function refreshAccounts() {
-  const data = await api.getAccounts();
-  const body = document.querySelector("#accountsTable tbody");
-  body.innerHTML = "";
-  for (const acc of data) {
-    const tr = document.createElement("tr");
-    const health = state.healthByAccount[acc.name] || "-";
+// ── Tab switching ──────────────────────────────────────────
+$('#tabNav').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  const target = btn.dataset.tab;
+  $$('.tab').forEach(t => t.classList.toggle('active', t === btn));
+  $$('.panel').forEach(p => p.classList.toggle('active', p.id === `panel-${target}`));
+});
+
+// ── Accounts ───────────────────────────────────────────────
+async function loadAccounts() {
+  try {
+    state.accounts = await API.getAccounts();
+  } catch { state.accounts = []; }
+  renderAccounts();
+}
+
+function renderAccounts() {
+  const tbody = $('#accountsTable tbody');
+  tbody.innerHTML = '';
+  for (const acc of state.accounts) {
+    const h = state.healthMap[acc.name];
+    let healthHtml = '<span style="color:var(--text-dim)">—</span>';
+    if (h === true) healthHtml = '<span class="health-ok">OK</span>';
+    else if (typeof h === 'string') healthHtml = `<span class="health-fail">${h}</span>`;
+
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" class="acc-check" data-name="${acc.name}"></td>
-      <td>${acc.name}</td>
+      <td>${esc(acc.name)}</td>
       <td>${acc.mt5_login}</td>
-      <td>${acc.mt5_server}</td>
-      <td>${health}</td>
+      <td>${esc(acc.mt5_server)}</td>
+      <td>${healthHtml}</td>
       <td>
-        <button data-name="${acc.name}" class="hc-btn">Health</button>
-        <button data-name="${acc.name}" class="del-btn">Delete</button>
-      </td>
-    `;
-    body.appendChild(tr);
+        <button class="btn-sm btn-muted hc-one" data-name="${esc(acc.name)}">Health</button>
+        <button class="btn-sm btn-red del-acc" data-name="${esc(acc.name)}">Del</button>
+      </td>`;
+    tbody.appendChild(tr);
   }
-  body.querySelectorAll(".hc-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const res = await api.healthcheckOne(btn.dataset.name);
-      state.healthByAccount[btn.dataset.name] = res.ok ? "OK" : `FAIL: ${res.error || "-"}`;
-      await refreshAccounts();
-    });
-  });
-  body.querySelectorAll(".del-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      await api.deleteAccount(btn.dataset.name);
-      await refreshAccounts();
-    });
+  populateAccountSelects();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+$('#accountsTable').addEventListener('click', async e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  const name = btn.dataset.name;
+  if (btn.classList.contains('hc-one')) {
+    const done = showSpinner(btn);
+    try {
+      const r = await API.healthcheckOne(name);
+      state.healthMap[name] = r.ok ? true : (r.error || 'FAIL');
+    } catch (err) { state.healthMap[name] = String(err.detail || err.message || 'Error'); }
+    done();
+    renderAccounts();
+  } else if (btn.classList.contains('del-acc')) {
+    if (!confirm(`Delete account "${name}"?`)) return;
+    const done = showSpinner(btn);
+    try { await API.deleteAccount(name); } catch {}
+    done();
+    await loadAccounts();
+  }
+});
+
+$('#accountForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const payload = {
+    name: String(f.get('name')).trim(),
+    mt5_login: Number(f.get('mt5_login')),
+    mt5_password: String(f.get('mt5_password')),
+    mt5_server: String(f.get('mt5_server')).trim(),
+    mt5_path: String(f.get('mt5_path') || '').trim() || null,
+    mt5_portable: f.get('mt5_portable') === 'on',
+  };
+  try {
+    await API.upsertAccount(payload);
+    e.target.reset();
+    await loadAccounts();
+  } catch (err) { alert('Save failed: ' + (err.detail || err.message || JSON.stringify(err))); }
+});
+
+$('#healthcheckAllBtn').addEventListener('click', async function () {
+  const done = showSpinner(this);
+  $('#healthStatus').textContent = 'Checking...';
+  try {
+    const res = await API.healthcheckAll();
+    state.healthMap = {};
+    for (const r of (res.results || [])) {
+      state.healthMap[r.name] = r.ok ? true : (r.error || 'FAIL');
+    }
+    renderAccounts();
+    $('#healthStatus').textContent = 'Done';
+  } catch (err) {
+    $('#healthStatus').textContent = 'Error: ' + (err.detail || err.message || '');
+  }
+  done();
+});
+
+// ── Order Builder ──────────────────────────────────────────
+function populateAccountSelects() {
+  $$('.order-row select[data-field="account"]').forEach(sel => {
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- account --</option>' +
+      state.accounts.map(a => `<option value="${esc(a.name)}"${a.name === current ? ' selected' : ''}>${esc(a.name)}</option>`).join('');
   });
 }
 
-function renderBook(book) {
-  setText("totalProfit", Number(book.total_profit || 0).toFixed(2));
-  const posBody = document.querySelector("#positionsTable tbody");
-  const ordBody = document.querySelector("#ordersTable tbody");
-  posBody.innerHTML = "";
-  ordBody.innerHTML = "";
+function createOrderRow() {
+  const id = ++state.orderRowId;
+  const div = document.createElement('div');
+  div.className = 'order-row';
+  div.dataset.rowId = id;
+  div.innerHTML = `
+    <select data-field="account"><option value="">-- account --</option></select>
+    <select data-field="side"><option value="buy">BUY</option><option value="sell">SELL</option></select>
+    <input data-field="symbol" placeholder="symbol" value="EURUSD" class="field-wide">
+    <input data-field="volume" type="number" step="0.01" min="0.01" placeholder="vol" value="0.1" style="width:70px">
+    <input data-field="trigger_price" type="number" step="0.00001" placeholder="trigger (opt)" style="width:100px">
+    <input data-field="sl_price" type="number" step="0.00001" placeholder="SL (opt)" style="width:90px">
+    <input data-field="tp_price" type="number" step="0.00001" placeholder="TP (opt)" style="width:90px">
+    <input data-field="comment" placeholder="comment" style="width:100px">
+    <button class="remove-row-btn" title="Remove row">&times;</button>`;
+  $('#orderRows').appendChild(div);
+  populateAccountSelects();
+}
 
-  for (const p of book.positions || []) {
-    const tr = document.createElement("tr");
-    const key = `${p.account}||${p.symbol}`;
+$('#addOrderRowBtn').addEventListener('click', () => createOrderRow());
+$('#clearOrderRowsBtn').addEventListener('click', () => { $('#orderRows').innerHTML = ''; setResult('tradingResult', ''); });
+$('#orderRows').addEventListener('click', e => {
+  if (e.target.closest('.remove-row-btn')) e.target.closest('.order-row').remove();
+});
+
+function collectOrderRows() {
+  const rows = [];
+  for (const div of $$('.order-row')) {
+    const get = field => {
+      const el = div.querySelector(`[data-field="${field}"]`);
+      return el ? el.value.trim() : '';
+    };
+    const account = get('account');
+    const symbol = get('symbol');
+    const side = get('side');
+    const volume = parseFloat(get('volume'));
+    if (!account || !symbol || !side || !volume) continue;
+    const row = { account, symbol, side, volume };
+    const trigger = parseFloat(get('trigger_price'));
+    const sl = parseFloat(get('sl_price'));
+    const tp = parseFloat(get('tp_price'));
+    const comment = get('comment');
+    if (!isNaN(trigger) && trigger > 0) row.trigger_price = trigger;
+    if (!isNaN(sl) && sl > 0) row.sl_price = sl;
+    if (!isNaN(tp) && tp > 0) row.tp_price = tp;
+    if (comment) row.comment = comment;
+    rows.push(row);
+  }
+  return rows;
+}
+
+$('#submitAllOrdersBtn').addEventListener('click', async function () {
+  const rows = collectOrderRows();
+  if (!rows.length) { setResult('tradingResult', 'Add at least one valid order row.'); return; }
+  const done = showSpinner(this);
+  setResult('tradingResult', 'Submitting orders in parallel...');
+  try {
+    const res = await API.submitPlan(rows);
+    setResult('tradingResult', res);
+  } catch (err) {
+    setResult('tradingResult', { error: err.detail || err.message || JSON.stringify(err) });
+  }
+  done();
+});
+
+$('#submitJsonPlanBtn').addEventListener('click', async function () {
+  const raw = $('#planJson').value.trim();
+  if (!raw) { setResult('jsonPlanResult', 'Enter JSON plan.'); return; }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (e) { setResult('jsonPlanResult', 'Invalid JSON: ' + e.message); return; }
+  const done = showSpinner(this);
+  try {
+    const res = await API.submitPlan(parsed);
+    setResult('jsonPlanResult', res);
+  } catch (err) {
+    setResult('jsonPlanResult', { error: err.detail || err.message || JSON.stringify(err) });
+  }
+  done();
+});
+
+// ── Live Book ──────────────────────────────────────────────
+function renderBook(data) {
+  const profit = Number(data.total_profit || 0);
+  const profStr = profit.toFixed(2);
+  setText('totalProfit', profStr);
+  const headerPnl = document.getElementById('headerPnl');
+  headerPnl.textContent = `P/L: ${profStr}`;
+  headerPnl.style.color = profit >= 0 ? 'var(--green)' : 'var(--red)';
+
+  const posTbody = $('#positionsTable tbody');
+  posTbody.innerHTML = '';
+  for (const p of (data.positions || [])) {
+    const pVal = Number(p.profit);
+    const cls = profitClass(pVal);
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input type="checkbox" class="pos-check" data-key="${key}" data-account="${p.account}" data-symbol="${p.symbol}"></td>
-      <td>${p.account}</td>
+      <td>${esc(p.account)}</td>
       <td>${p.ticket}</td>
-      <td>${p.symbol}</td>
+      <td>${esc(p.symbol)}</td>
       <td>${p.side}</td>
       <td>${p.volume}</td>
-      <td>${Number(p.profit).toFixed(2)}</td>
-      <td><button class="close-btn" data-account="${p.account}" data-symbol="${p.symbol}" data-side="${p.side}">Close</button></td>
-    `;
-    posBody.appendChild(tr);
+      <td>${p.price_open}</td>
+      <td class="${cls}">${pVal.toFixed(2)}</td>
+      <td>${p.sl || 0}</td>
+      <td>${p.tp || 0}</td>
+      <td><button class="btn-sm btn-red close-pos" data-account="${esc(p.account)}" data-symbol="${esc(p.symbol)}" data-side="${p.side}">Close</button></td>`;
+    posTbody.appendChild(tr);
   }
 
-  for (const o of book.pending_orders || []) {
-    const tr = document.createElement("tr");
+  const ordTbody = $('#ordersTable tbody');
+  ordTbody.innerHTML = '';
+  for (const o of (data.pending_orders || [])) {
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${o.account}</td>
+      <td>${esc(o.account)}</td>
       <td>${o.ticket}</td>
-      <td>${o.symbol}</td>
+      <td>${esc(o.symbol)}</td>
       <td>${o.order_type}</td>
       <td>${o.volume}</td>
       <td>${o.price_open}</td>
-    `;
-    ordBody.appendChild(tr);
+      <td>${o.sl || 0}</td>
+      <td>${o.tp || 0}</td>`;
+    ordTbody.appendChild(tr);
   }
-
-  posBody.querySelectorAll(".close-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const res = await api.closeOrder(btn.dataset.account, btn.dataset.symbol, btn.dataset.side);
-      alert(`Closed: ${res.closed_count}`);
-    });
-  });
 }
 
-function selectedAccounts() {
-  return Array.from(document.querySelectorAll(".acc-check:checked")).map(i => i.dataset.name);
-}
-
-async function refreshBook() {
-  const book = await api.getBook();
-  renderBook(book);
-}
-
-function connectRealtime() {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${proto}//${window.location.host}/ws/realtime`);
-  ws.onmessage = (evt) => {
-    const payload = JSON.parse(evt.data);
-    if (payload.type === "snapshot") {
-      renderBook(payload.data);
-    }
-  };
-  ws.onclose = () => setTimeout(connectRealtime, 1000);
-}
-
-async function refreshLicense() {
-  const status = await api.licenseStatus();
-  setJson("licenseResult", status);
-  setText("licenseBadge", `License: ${status.status}`);
-}
-
-document.getElementById("accountForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const payload = {
-    name: String(form.get("name") || ""),
-    mt5_login: Number(form.get("mt5_login")),
-    mt5_password: String(form.get("mt5_password") || ""),
-    mt5_server: String(form.get("mt5_server") || ""),
-    mt5_path: String(form.get("mt5_path") || ""),
-    mt5_portable: form.get("mt5_portable") === "on"
-  };
-  await api.upsertAccount(payload);
-  e.target.reset();
-  await refreshAccounts();
-});
-
-document.getElementById("refreshAccountsBtn").addEventListener("click", refreshAccounts);
-document.getElementById("refreshBookBtn").addEventListener("click", refreshBook);
-document.getElementById("refreshLicenseBtn").addEventListener("click", refreshLicense);
-document.getElementById("healthcheckAllBtn").addEventListener("click", async () => {
-  const res = await api.healthcheckAll();
-  state.healthByAccount = {};
-  for (const row of res.results || []) {
-    state.healthByAccount[row.name] = row.ok ? "OK" : `FAIL: ${row.error || "-"}`;
-  }
-  await refreshAccounts();
-});
-
-document.getElementById("submitPlanBtn").addEventListener("click", async () => {
+$('#positionsTable').addEventListener('click', async e => {
+  const btn = e.target.closest('.close-pos');
+  if (!btn) return;
+  if (!confirm(`Close ${btn.dataset.side} ${btn.dataset.symbol} on ${btn.dataset.account}?`)) return;
+  const done = showSpinner(btn);
   try {
-    const raw = document.getElementById("planJson").value;
-    const planRows = JSON.parse(raw);
-    const res = await api.submitPlan(planRows);
-    setJson("planResult", res);
+    const res = await API.closeOrder(btn.dataset.account, btn.dataset.symbol, btn.dataset.side);
+    setResult('tradingResult', { closed: res.closed_count, details: res.details });
   } catch (err) {
-    setJson("planResult", { ok: false, error: String(err) });
+    alert('Close failed: ' + (err.detail || err.message || JSON.stringify(err)));
   }
+  done();
 });
 
-document.getElementById("quickOrderForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const accounts = selectedAccounts();
-  if (!accounts.length) {
-    setJson("quickOrderResult", { ok: false, error: "Select at least one account" });
-    return;
-  }
-  const form = new FormData(e.target);
-  const body = {
-    accounts,
-    symbol: String(form.get("symbol") || ""),
-    side: String(form.get("side") || "buy"),
-    volume: Number(form.get("volume")),
-    comment: String(form.get("comment") || "")
+// ── WebSocket realtime ─────────────────────────────────────
+let ws = null;
+let wsRetry = 1000;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws/realtime`);
+  ws.onopen = () => {
+    document.getElementById('wsDot').classList.add('connected');
+    wsRetry = 1000;
   };
-  const trigger = String(form.get("trigger_price") || "").trim();
-  const sl = String(form.get("sl_price") || "").trim();
-  const tp = String(form.get("tp_price") || "").trim();
-  if (trigger) body.trigger_price = Number(trigger);
-  if (sl) body.sl_price = Number(sl);
-  if (tp) body.tp_price = Number(tp);
-  const res = await api.quickMulti(body);
-  setJson("quickOrderResult", res);
-});
+  ws.onclose = () => {
+    document.getElementById('wsDot').classList.remove('connected');
+    setTimeout(connectWS, wsRetry);
+    wsRetry = Math.min(wsRetry * 1.5, 10000);
+  };
+  ws.onmessage = evt => {
+    try {
+      const msg = JSON.parse(evt.data);
+      if (msg.type === 'snapshot') renderBook(msg.data);
+    } catch {}
+  };
+}
 
-document.getElementById("closeSelectedBtn").addEventListener("click", async () => {
-  const selected = Array.from(document.querySelectorAll(".pos-check:checked"));
-  if (!selected.length) {
-    alert("Select at least one position row");
-    return;
-  }
-  const uniq = new Map();
-  for (const s of selected) {
-    const key = `${s.dataset.account}||${s.dataset.symbol}`;
-    if (!uniq.has(key)) {
-      uniq.set(key, { account: s.dataset.account, symbol: s.dataset.symbol });
-    }
-  }
-  const results = [];
-  for (const row of uniq.values()) {
-    const res = await api.closeOrder(row.account, row.symbol, "all");
-    results.push(res);
-  }
-  alert(`Close requests sent: ${results.length}`);
-});
+// ── License ────────────────────────────────────────────────
+async function refreshLicense() {
+  try {
+    const s = await API.licenseStatus();
+    setResult('licenseResult', s);
+    const badge = document.getElementById('headerLic');
+    badge.textContent = `License: ${s.status}`;
+    badge.style.color = s.ok ? 'var(--green)' : 'var(--red)';
+  } catch (err) { setResult('licenseResult', { error: String(err) }); }
+}
 
-document.getElementById("activateLicenseBtn").addEventListener("click", async () => {
-  const path = document.getElementById("licensePath").value;
-  const res = await api.activateLicense(path);
-  setJson("licenseResult", res);
+$('#activateLicenseBtn').addEventListener('click', async function () {
+  const p = $('#licensePath').value.trim();
+  if (!p) { setResult('licenseResult', 'Enter license file path.'); return; }
+  const done = showSpinner(this);
+  try {
+    const res = await API.activateLicense(p);
+    setResult('licenseResult', res);
+  } catch (err) { setResult('licenseResult', { error: err.detail || err.message || JSON.stringify(err) }); }
+  done();
   await refreshLicense();
 });
 
-refreshAccounts();
-refreshBook();
-refreshLicense();
-connectRealtime();
+$('#refreshLicenseBtn').addEventListener('click', refreshLicense);
+
+// ── Boot ───────────────────────────────────────────────────
+(async function boot() {
+  await loadAccounts();
+  refreshLicense();
+  connectWS();
+  createOrderRow();
+})();

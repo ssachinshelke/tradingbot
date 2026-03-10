@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +36,15 @@ from .service import TradingUIService
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+_pool = ThreadPoolExecutor(max_workers=8)
+
+
+async def _run_blocking(fn, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    call = partial(fn, *args, **kwargs) if kwargs else partial(fn, *args)
+    return await loop.run_in_executor(_pool, call)
 
 
 class WebSocketHub:
@@ -79,7 +90,7 @@ async def startup_event() -> None:
     async def realtime_loop() -> None:
         while True:
             try:
-                snapshot = service.get_active_book()
+                snapshot = await _run_blocking(service.get_active_book)
                 await hub.broadcast(
                     {
                         "type": "snapshot",
@@ -136,22 +147,23 @@ def delete_account(name: str) -> ApiResponse:
 
 
 @app.post("/api/healthcheck", response_model=HealthResponse)
-def healthcheck(req: HealthRequest) -> HealthResponse:
-    results = service.run_healthcheck(req.account_names, req.symbol)
+async def healthcheck(req: HealthRequest) -> HealthResponse:
+    results = await _run_blocking(service.run_healthcheck, req.account_names, req.symbol)
     return HealthResponse(ok=True, results=results)
 
 
 @app.get("/api/healthcheck/{account_name}")
-def healthcheck_one(account_name: str, symbol: str | None = None) -> dict[str, Any]:
-    return service.run_healthcheck_one(account_name=account_name, symbol=symbol)
+async def healthcheck_one(account_name: str, symbol: str | None = None) -> dict[str, Any]:
+    return await _run_blocking(service.run_healthcheck_one, account_name=account_name, symbol=symbol)
 
 
 @app.post("/api/trade/submit-plan", response_model=PlanSubmitResponse)
-def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
+async def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
     lic = license_manager.status()
     if lic.status in ("trial_expired", "license_invalid"):
         raise HTTPException(status_code=403, detail=lic.error or "License invalid")
-    payload = service.submit_plan(
+    payload = await _run_blocking(
+        service.submit_plan,
         plan_rows=req.plan_rows,
         timeout_seconds=req.timeout_seconds,
         poll_seconds=req.poll_seconds,
@@ -165,11 +177,12 @@ def submit_plan(req: PlanSubmitRequest) -> PlanSubmitResponse:
 
 
 @app.post("/api/trade/quick-multi", response_model=QuickMultiOrderResponse)
-def quick_multi(req: QuickMultiOrderRequest) -> QuickMultiOrderResponse:
+async def quick_multi(req: QuickMultiOrderRequest) -> QuickMultiOrderResponse:
     lic = license_manager.status()
     if lic.status in ("trial_expired", "license_invalid"):
         raise HTTPException(status_code=403, detail=lic.error or "License invalid")
-    payload = service.quick_multi_order(
+    payload = await _run_blocking(
+        service.quick_multi_order,
         accounts=req.accounts,
         symbol=req.symbol,
         side=req.side,
@@ -191,8 +204,8 @@ def quick_multi(req: QuickMultiOrderRequest) -> QuickMultiOrderResponse:
 
 
 @app.get("/api/orders/active", response_model=ActiveBookResponse)
-def active_orders() -> ActiveBookResponse:
-    data = service.get_active_book()
+async def active_orders() -> ActiveBookResponse:
+    data = await _run_blocking(service.get_active_book)
     return ActiveBookResponse(
         ok=True,
         positions=data["positions"],
@@ -202,12 +215,13 @@ def active_orders() -> ActiveBookResponse:
 
 
 @app.post("/api/orders/close", response_model=CloseResponse)
-def close_order(req: CloseRequest) -> CloseResponse:
+async def close_order(req: CloseRequest) -> CloseResponse:
     lic = license_manager.status()
     if lic.status in ("trial_expired", "license_invalid"):
         raise HTTPException(status_code=403, detail=lic.error or "License invalid")
     try:
-        out = service.close_positions(
+        out = await _run_blocking(
+            service.close_positions,
             account_name=req.account,
             symbol=req.symbol,
             side=req.side,
