@@ -593,6 +593,10 @@ class TradingUIService:
                                 "executed_at_utc": when.isoformat(),
                             }
                         )
+            except Exception:
+                # Never fail the whole history endpoint due to one bad account
+                # (e.g., temporary MT5 session/login issue).
+                continue
             finally:
                 try:
                     bot.stop()
