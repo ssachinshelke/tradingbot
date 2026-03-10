@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260310-14">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260310-15">
 </head>
 <body>
   <header class="topbar">
@@ -60,17 +60,17 @@
   <section class="panel" id="panel-accounts">
     <div class="panel-header">
       <h2>Manage Accounts</h2>
-      <p class="sub" id="accountLimitHint">Max 4 accounts allowed for low-latency execution.</p>
+      <p class="sub" id="accountLimitHint">Max 2 accounts allowed in this license build.</p>
       <p class="sub">Recommended flow: (1) Auto-create portable folders, (2) fill <code>account.json</code>, (3) Import Accounts.</p>
     </div>
 
     <div class="panel-header" style="margin-top:10px">
       <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
-      <p class="sub">Creates 4 portable copies automatically in local <code>mt5-portable</code> folder and updates <code>account.json</code>.</p>
+      <p class="sub">Creates 2 portable copies automatically in local <code>mt5-portable</code> folder and updates <code>account.json</code>.</p>
     </div>
     <form id="portableForm" class="acc-form">
       <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
-      <button type="submit" class="btn-sm btn-accent">Create 4 Portable Folders</button>
+      <button type="submit" class="btn-sm btn-accent">Create 2 Portable Folders</button>
     </form>
     <div class="sub" id="portableHint"></div>
     <div class="sub" id="portableStatus"></div>
@@ -205,6 +205,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-14"></script>
+  <script src="/ui/app.js?v=20260310-15"></script>
 </body>
 </html>

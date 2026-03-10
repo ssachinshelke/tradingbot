@@ -25,7 +25,7 @@ class AccountPayload(BaseModel):
 class PortableCreateRequest(BaseModel):
     source_dir: str
     target_root: str | None = None
-    names_csv: str = "acc1,acc2,acc3,acc4"
+    names_csv: str = "acc1,acc2"
     append_accounts: bool = True
 
 

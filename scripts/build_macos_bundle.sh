@@ -27,22 +27,11 @@ mkdir -p "$BUNDLE_DIR"
 cp "dist/Tradingm5UI" "$BUNDLE_DIR/Tradingm5UI"
 chmod +x "$BUNDLE_DIR/Tradingm5UI"
 
-if [[ -f "scripts/start_ui.command" ]]; then
-  cp "scripts/start_ui.command" "$BUNDLE_DIR/start_ui.command"
-  chmod +x "$BUNDLE_DIR/start_ui.command"
-fi
-if [[ -f "accounts.example.json" ]]; then
-  cp "accounts.example.json" "$BUNDLE_DIR/accounts.example.json"
-fi
-if [[ -f ".env.example" ]]; then
-  cp ".env.example" "$BUNDLE_DIR/.env.example"
-fi
-
 cat > "$BUNDLE_DIR/README_RELEASE.txt" <<'EOF'
 Tradingm5UI Release Bundle (macOS)
 ==================================
 
-1) Run ./Tradingm5UI (or double-click start_ui.command)
+1) Run ./Tradingm5UI
 2) Add accounts in UI -> Accounts tab
 3) Run Healthcheck from UI
 4) Place orders from Trading tab

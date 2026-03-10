@@ -51,7 +51,7 @@ class TradingUIService:
         self._request_cache: dict[str, dict[str, Any]] = {}
         self._closed_journal_path = Path("logs") / "closed_deals_journal.jsonl"
         self._closed_journal_path.parent.mkdir(parents=True, exist_ok=True)
-        self._max_ui_accounts = max(1, int(os.getenv("UI_MAX_ACCOUNTS", "4") or "4"))
+        self._max_ui_accounts = max(1, int(os.getenv("UI_MAX_ACCOUNTS", "2") or "2"))
         self._ensure_default_accounts_file()
 
     def _ensure_default_accounts_file(self) -> None:
@@ -366,7 +366,7 @@ class TradingUIService:
         root.mkdir(parents=True, exist_ok=True)
         names = [n.strip() for n in (names_csv or "").split(",") if n.strip()]
         if not names:
-            names = ["acc1", "acc2", "acc3", "acc4"]
+            names = ["acc1", "acc2"]
         if not names:
             raise ValueError("Provide at least one copy name (comma-separated).")
 
@@ -950,12 +950,22 @@ class TradingUIService:
         else:
             default_source = r"C:\Program Files\MetaTrader 5"
 
+        portable_root = Path("mt5-portable")
+        existing_portable: list[str] = []
+        if portable_root.exists():
+            for p in sorted(portable_root.iterdir()):
+                if p.is_dir() and (p / "terminal64.exe").exists():
+                    existing_portable.append(p.name)
+
         return {
             "platform": "windows",
             "count": len(hits),
             "items": hits,
             "default_source_dir": default_source,
             "install_required": len(hits) == 0,
+            "portable_root": str(portable_root.resolve()),
+            "portable_count": len(existing_portable),
+            "portable_items": existing_portable,
             "message": (
                 "MT5 detected." if hits else
                 "MT5 terminal not found. Install MetaTrader 5 first, then retry."

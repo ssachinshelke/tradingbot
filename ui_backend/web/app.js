@@ -4,7 +4,7 @@
 
 // ── API layer ──────────────────────────────────────────────
 const API = {
-  MAX_ACCOUNTS: 4,
+  MAX_ACCOUNTS: 2,
   async _json(r) {
     const text = await r.text();
     let data = null;
@@ -80,7 +80,7 @@ const state = {
   orderRowId: 0,
   closingSet: new Set(),
 };
-const DEFAULT_PORTABLE_NAMES = ['acc1', 'acc2', 'acc3', 'acc4'];
+const DEFAULT_PORTABLE_NAMES = ['acc1', 'acc2'];
 
 // ── Helpers ────────────────────────────────────────────────
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -271,6 +271,7 @@ $('#portableForm').addEventListener('submit', async e => {
     const out = await API.createPortable(payload);
     setText('portableStatus', `Created ${out.created_count || 0} portable folder(s): ${DEFAULT_PORTABLE_NAMES.join(', ')}.`);
     await loadAccounts();
+    await initPortableDefaults();
   } catch (err) {
     setText('portableStatus', err.detail || err.error || err.message || String(err));
   }
@@ -299,10 +300,22 @@ async function initPortableDefaults() {
       serverInput.value = 'MetaQuotes-Demo';
     }
     if (hint) {
-      if (res.install_required) {
+      const hasPortable = Number(res.portable_count || 0) >= DEFAULT_PORTABLE_NAMES.length;
+      const createBtn = $('#portableForm button[type="submit"]');
+      if (hasPortable) {
+        hint.textContent = `Portable folders already created (${(res.portable_items || []).join(', ')}). You can skip this step.`;
+        if (createBtn) {
+          createBtn.disabled = true;
+          createBtn.title = 'Portable setup already exists';
+        }
+      } else if (res.install_required) {
         hint.textContent = 'MT5 not detected. Please install MetaTrader 5, then retry auto-create.';
       } else {
         hint.textContent = `Detected ${res.count} terminal path(s). Auto-filled source path.`;
+        if (createBtn) {
+          createBtn.disabled = false;
+          createBtn.title = '';
+        }
       }
     }
   } catch (err) {
@@ -458,6 +471,8 @@ $('#submitAllOrdersBtn').addEventListener('click', async function () {
     const okCount = (res.results || []).filter(r => r.ok).length;
     const total = (res.results || []).length;
     setText('tradingStatus', `Submitted. Success: ${okCount}/${total}`);
+    $('#orderRows').innerHTML = '';
+    createOrderRow();
   } catch (err) {
     setText('tradingStatus', err.detail || err.error || err.message || String(err));
   }

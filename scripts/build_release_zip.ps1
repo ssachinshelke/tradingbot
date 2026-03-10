@@ -33,22 +33,13 @@ if (!(Test-Path $exePath)) {
     throw "Build finished but executable not found at: $exePath"
 }
 Copy-Item $exePath -Destination (Join-Path $bundleDir "Tradingm5UI.exe")
-if (Test-Path "scripts\start_ui.bat") {
-    Copy-Item "scripts\start_ui.bat" -Destination (Join-Path $bundleDir "start_ui.bat")
-}
-if (Test-Path "accounts.example.json") {
-    Copy-Item "accounts.example.json" -Destination (Join-Path $bundleDir "accounts.example.json")
-}
-if (Test-Path ".env.example") {
-    Copy-Item ".env.example" -Destination (Join-Path $bundleDir ".env.example")
-}
 
 $notesPath = Join-Path $bundleDir "README_RELEASE.txt"
 @"
 Tradingm5UI Release Bundle
 =========================
 
-1) Run Tradingm5UI.exe (or start_ui.bat)
+1) Run Tradingm5UI.exe
 2) Add accounts in UI -> Accounts tab
 3) Verify Healthcheck in UI
 4) Place orders from Trading tab
