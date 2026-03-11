@@ -12,3 +12,5 @@ mt5-portable/
 *.csv
 build/
 dist/
+tools/vendor_public_key.b64.txt
+tools/vendor_private_key.b64.txt
