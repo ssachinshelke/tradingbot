@@ -56,6 +56,9 @@ const API = {
   },
   licenseStatus()         { return this.get('/api/license/status'); },
   activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
+  createLicenseRequest(outputPath = 'license_request.json') {
+    return this.post('/api/license/request', { output_path: outputPath });
+  },
   closedHistory(accountName = '', days = 7, limit = 300, mode = 'closed') {
     const params = new URLSearchParams({ days: String(days), limit: String(limit) });
     if (accountName) params.set('account_name', accountName);
@@ -946,6 +949,25 @@ $('#activateLicenseBtn').addEventListener('click', async function () {
     const res = await API.activateLicense(p);
     setResult('licenseResult', res);
   } catch (err) { setResult('licenseResult', { error: err.detail || err.message || JSON.stringify(err) }); }
+  done();
+  await refreshLicense();
+});
+
+$('#generateLicenseReqBtn').addEventListener('click', async function () {
+  const p = ($('#licenseReqPath')?.value || '').trim() || 'license_request.json';
+  const done = showSpinner(this);
+  try {
+    const res = await API.createLicenseRequest(p);
+    setResult('licenseResult', {
+      ok: true,
+      message: 'License request file generated. Share this file with vendor.',
+      file_path: res.file_path,
+      machine_hash: res.machine_hash,
+      requested_at_utc: res.requested_at_utc,
+    });
+  } catch (err) {
+    setResult('licenseResult', { error: err.detail || err.error || err.message || JSON.stringify(err) });
+  }
   done();
   await refreshLicense();
 });

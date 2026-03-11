@@ -28,6 +28,8 @@ from .api_models import (
     HealthRequest,
     HealthResponse,
     LicenseActivateRequest,
+    LicenseRequestCreateRequest,
+    LicenseRequestCreateResponse,
     LicenseStatusResponse,
     PortableCreateRequest,
     PortableCreateResponse,
@@ -470,6 +472,17 @@ def license_activate(req: LicenseActivateRequest) -> LicenseStatusResponse:
         machine_id=status.machine_id,
         error=status.error,
     )
+
+
+@app.post("/api/license/request", response_model=LicenseRequestCreateResponse)
+def license_request_create(req: LicenseRequestCreateRequest) -> LicenseRequestCreateResponse:
+    try:
+        out = license_manager.create_license_request_file(
+            output_path=req.output_path,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return LicenseRequestCreateResponse(ok=True, **out)
 
 
 @app.websocket("/ws/realtime")

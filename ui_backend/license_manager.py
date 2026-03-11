@@ -68,6 +68,7 @@ class LicenseManager:
         self.trial_days = trial_days
         self._trusted_time_provider = trusted_time_provider
         self.strict_trusted_time = _env_bool("LICENSE_STRICT_TRUSTED_TIME", True)
+        self.require_manual_activation = _env_bool("LICENSE_REQUIRE_MANUAL_ACTIVATION", True)
         self.validation_url = os.getenv("LICENSE_VALIDATION_URL", "").strip()
         self.validation_token = os.getenv("LICENSE_VALIDATION_TOKEN", "").strip()
         self.require_online_validation = _env_bool("LICENSE_REQUIRE_ONLINE_VALIDATION", False)
@@ -84,6 +85,35 @@ class LicenseManager:
         self.license_store_path = self.state_dir / "license.json"
         self.hidden_anchor_path = self.state_dir / ".trial_anchor.dat"
         self._secret = hashlib.sha256(f"{self.product_name}:{self.machine_id}".encode("utf-8")).digest()
+
+    def build_license_request(
+        self,
+    ) -> dict[str, Any]:
+        return {
+            "product": self.product_name,
+            "machine_hash": self.machine_id,
+            "requested_at_utc": _iso(_utc_now()),
+            "system": {
+                "node": platform.node(),
+                "os": platform.system(),
+                "os_release": platform.release(),
+                "machine": platform.machine(),
+            },
+        }
+
+    def create_license_request_file(
+        self,
+        output_path: str = "license_request.json",
+    ) -> dict[str, Any]:
+        req = self.build_license_request()
+        out = Path(output_path).resolve()
+        out.write_text(json.dumps(req, indent=2), encoding="utf-8")
+        return {
+            "ok": True,
+            "file_path": str(out),
+            "machine_hash": self.machine_id,
+            "requested_at_utc": req["requested_at_utc"],
+        }
 
     def _resolve_state_dir(self) -> Path:
         base = os.getenv("PROGRAMDATA", "")
@@ -370,6 +400,9 @@ class LicenseManager:
         signature_b64 = str(doc.get("signature", ""))
         if not isinstance(payload, dict) or not signature_b64:
             return False, "Invalid license format"
+        payload_product = str(payload.get("product", self.product_name)).strip() or self.product_name
+        if payload_product != self.product_name:
+            return False, "License product mismatch"
         if str(payload.get("machine_hash", "")) != self.machine_id:
             return False, "License is not valid for this machine"
         message = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -400,7 +433,6 @@ class LicenseManager:
         body = {
             "product": self.product_name,
             "machine_id": self.machine_id,
-            "customer_id": str(payload.get("customer_id", "")),
             "license_id": str(payload.get("license_id", "")),
             "machine_hash": str(payload.get("machine_hash", "")),
             "issued_at": str(payload.get("issued_at", "")),
@@ -444,9 +476,6 @@ class LicenseManager:
             )
         try:
             ref_now, _ = self._reference_now()
-            # Enforce trial state integrity before activation too.
-            self._ensure_trial_state()
-
             doc = json.loads(file_path.read_text(encoding="utf-8"))
             ok, err = self._verify_license_document(doc, reference_now=ref_now)
             if not ok:
@@ -463,12 +492,7 @@ class LicenseManager:
                     error=err,
                 )
             self.license_store_path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
-            expires_at = _parse_iso(str(doc["payload"]["expires_at"]))
-            return LicenseStatus(
-                status="license_valid",
-                expires_at=expires_at,
-                machine_id=self.machine_id,
-            )
+            return self._status_from_valid_license_doc(doc, ref_now)
         except Exception as exc:
             return LicenseStatus(
                 status="license_invalid",
@@ -488,18 +512,12 @@ class LicenseManager:
 
         if self.license_store_path.exists():
             try:
-                # Keep anchor checks active even for paid license.
-                self._ensure_trial_state()
                 doc = json.loads(self.license_store_path.read_text(encoding="utf-8"))
                 ok, err = self._verify_license_document(doc, reference_now=ref_now)
                 if ok:
                     ok, err = self._online_validate_license(doc, reference_now=ref_now)
                 if ok:
-                    return LicenseStatus(
-                        status="license_valid",
-                        expires_at=_parse_iso(str(doc["payload"]["expires_at"])),
-                        machine_id=self.machine_id,
-                    )
+                    return self._status_from_valid_license_doc(doc, ref_now)
                 return LicenseStatus(
                     status="license_invalid",
                     machine_id=self.machine_id,
@@ -511,6 +529,13 @@ class LicenseManager:
                     machine_id=self.machine_id,
                     error=str(exc),
                 )
+
+        if self.require_manual_activation:
+            return LicenseStatus(
+                status="license_invalid",
+                machine_id=self.machine_id,
+                error="License not activated. Generate license_request.json and get signed license from vendor.",
+            )
 
         try:
             trial = self._ensure_trial_state()
@@ -587,5 +612,21 @@ class LicenseManager:
             status="trial_active",
             expires_at=expires,
             trial_days_left=days_left,
+            machine_id=self.machine_id,
+        )
+
+    def _status_from_valid_license_doc(self, doc: dict[str, Any], ref_now: datetime) -> LicenseStatus:
+        payload = doc.get("payload") if isinstance(doc, dict) else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        expires_at = _parse_iso(str(payload.get("expires_at")))
+        license_type = str(payload.get("license_type", "paid")).strip().lower()
+        trial_days_left: int | None = None
+        if license_type == "trial":
+            trial_days_left = max((expires_at - ref_now).days, 0)
+        return LicenseStatus(
+            status="license_valid",
+            expires_at=expires_at,
+            trial_days_left=trial_days_left,
             machine_id=self.machine_id,
         )

@@ -181,6 +181,16 @@ class LicenseActivateRequest(BaseModel):
     license_key_path: str
 
 
+class LicenseRequestCreateRequest(BaseModel):
+    output_path: str = "license_request.json"
+
+
+class LicenseRequestCreateResponse(ApiResponse):
+    file_path: str
+    machine_hash: str
+    requested_at_utc: str
+
+
 class StreamPayload(BaseModel):
     type: Literal["snapshot", "status", "error"]
     timestamp_utc: str

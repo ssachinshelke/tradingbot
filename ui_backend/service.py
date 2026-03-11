@@ -102,7 +102,7 @@ class TradingUIService:
                 enable_partial_tp=os.getenv("ENABLE_PARTIAL_TP", "true").strip().lower() in ("1", "true", "yes"),
                 partial_tp_trigger_pips=float(os.getenv("PARTIAL_TP_TRIGGER_PIPS", "20")),
                 partial_tp_close_pct=float(os.getenv("PARTIAL_TP_CLOSE_PCT", "0.5")),
-                accounts_file=os.getenv("ACCOUNTS_FILE", "accounts.json"),
+                accounts_file=os.getenv("ACCOUNTS_FILE", "account.json"),
                 dispatch_journal_path=os.getenv("DISPATCH_JOURNAL_PATH", "dispatch_journal.csv"),
                 sync_send_delay_ms=int(os.getenv("SYNC_SEND_DELAY_MS", "300")),
                 strategy_name=os.getenv("STRATEGY_NAME", "ma_cross").strip(),

@@ -31,7 +31,7 @@ jobs:
       MT5_LOGIN: "10000001"
       MT5_PASSWORD: "ci-placeholder"
       MT5_SERVER: "MetaQuotes-Demo"
-      LICENSE_PUBLIC_KEY_B64: "ci-placeholder"
+      LICENSE_PUBLIC_KEY_B64: ${{ secrets.LICENSE_PUBLIC_KEY_B64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,6 +40,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Validate license public key secret
+        shell: powershell
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:LICENSE_PUBLIC_KEY_B64)) {
+            throw "Missing GitHub secret LICENSE_PUBLIC_KEY_B64"
+          }
 
       - name: Build release zip (Windows)
         shell: powershell
@@ -62,7 +69,7 @@ jobs:
       MT5_LOGIN: "10000001"
       MT5_PASSWORD: "ci-placeholder"
       MT5_SERVER: "MetaQuotes-Demo"
-      LICENSE_PUBLIC_KEY_B64: "ci-placeholder"
+      LICENSE_PUBLIC_KEY_B64: ${{ secrets.LICENSE_PUBLIC_KEY_B64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,6 +78,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Validate license public key secret
+        run: |
+          if [ -z "${LICENSE_PUBLIC_KEY_B64}" ]; then
+            echo "Missing GitHub secret LICENSE_PUBLIC_KEY_B64"
+            exit 1
+          fi
 
       - name: Build release zip (macOS)
         run: |

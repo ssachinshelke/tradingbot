@@ -4,7 +4,7 @@ Local multi-account MT5 trading platform with:
 - realtime dashboard (health, orders, positions, floating P/L)
 - advanced JSON order workflows
 - one-click close by account/symbol
-- offline 7-day trial + signed license activation
+- offline signed license activation (including signed trial licenses)
 
 ---
 
@@ -305,33 +305,55 @@ python run_ui.py
 
 ---
 
-## 9) Licensing (7-day trial + offline activation)
+## 9) Licensing (vendor-signed offline activation)
 
 Runtime states:
-- `trial_active`
-- `trial_expired`
 - `license_valid`
 - `license_invalid`
 
-### Get machine hash (customer machine)
+### Production mode behavior
+- Trading is blocked until a signed license is activated.
+- Account onboarding, portable creation, symbol checks, and health checks remain available.
+- Set `LICENSE_REQUIRE_MANUAL_ACTIVATION=true` (default in `.env.example`).
+
+### Customer flow (UI)
+1. Open **License** tab.
+2. Click **Generate Request** (writes `license_request.json`).
+3. Share that request file with vendor.
+4. Receive signed `license.json`.
+5. Activate in UI (`Activate` button) or API `POST /api/license/activate`.
+
+### Vendor flow (local laptop; no cloud server required)
+Generate key pair once:
 ```powershell
-python tools/license_machine_id.py
+python tools/license_keygen.py --output-dir .
 ```
 
-### Vendor issues signed license file
+Issue a signed license from customer request (single default command):
 ```powershell
-python tools/license_issuer.py --private-key-b64 "<PRIVATE_KEY_B64>" --customer-id "cust-001" --machine-hash "<MACHINE_HASH>" --days 365 --output "license.json"
+python tools/license_issuer.py
 ```
 
-### Activate in app
-- UI: use License section and provide file path
-- API: `POST /api/license/activate`
+Defaults:
+- reads `license_request.json`
+- writes `license.json`
+- uses `license_type=trial`
+- uses `days=7` (or custom via `LICENSE_DEFAULT_DAYS`)
+- private key is auto-loaded from local `vendor_private_key.b64.txt` if present
+
+Override only when needed:
+```powershell
+python tools/license_issuer.py --license-type paid --days 365 --request-file "license_request.json" --output "license_paid.json"
+```
+
+What customer must share to get license:
+- `license_request.json` (generated from app UI)
 
 Notes:
 - private key must stay with vendor only
 - public key goes to `LICENSE_PUBLIC_KEY_B64` on client side
-- this is an offline hardened licensing model (strong deterrence, not mathematically unbreakable)
-- optional production server-side validation is supported with:
+- OS/hardware changes are detected via machine-bound hash (license mismatch after major change)
+- optional server-side validation remains supported:
   - `LICENSE_VALIDATION_URL`
   - `LICENSE_VALIDATION_TOKEN`
   - `LICENSE_REQUIRE_ONLINE_VALIDATION=true` (fail closed if validation service is unavailable)

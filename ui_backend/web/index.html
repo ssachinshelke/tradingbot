@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260310-16">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260311-1">
 </head>
 <body>
   <header class="topbar">
@@ -186,7 +186,13 @@
   <section class="panel" id="panel-license">
     <div class="panel-header">
       <h2>License</h2>
+      <p class="sub">Trading is blocked until a vendor-signed license is activated. Onboarding and account setup remain available.</p>
     </div>
+    <div class="lic-form">
+      <input id="licenseReqPath" placeholder="license_request.json" class="lic-input" value="license_request.json">
+      <button id="generateLicenseReqBtn" class="btn-sm btn-muted">Generate Request</button>
+    </div>
+    <div class="sub">Share generated request file with vendor to receive signed license file.</div>
     <div class="lic-form">
       <input id="licensePath" placeholder="C:\path\to\license.json" class="lic-input">
       <button id="activateLicenseBtn" class="btn-sm btn-accent">Activate</button>
@@ -205,6 +211,6 @@
     <div class="result-box" id="logsResult"></div>
   </section>
 
-  <script src="/ui/app.js?v=20260310-16"></script>
+  <script src="/ui/app.js?v=20260311-1"></script>
 </body>
 </html>
