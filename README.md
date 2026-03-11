@@ -367,7 +367,6 @@ Notes:
 
 Important:
 - Build **Windows release on Windows**
-- Build **macOS release on macOS**
 - PyInstaller does not reliably cross-compile between OS families.
 
 ### Windows release
@@ -389,25 +388,8 @@ Launch helper (dev machine):
 .\scripts\start_ui.bat
 ```
 
-### macOS release
-```bash
-chmod +x ./scripts/build_macos_bundle.sh
-./scripts/build_macos_bundle.sh v1
-```
-
-Outputs:
-- `dist/Tradingm5UI` (native macOS binary)
-- `release/Tradingm5UI_<version>_macOS_<timestamp>.zip`
-
-Launch helper:
-```bash
-chmod +x ./scripts/start_ui.command
-./scripts/start_ui.command
-```
-
 Recommended hardening for production distribution:
-- code sign binaries (Windows Authenticode, Apple Developer ID)
-- notarize macOS binary/app before sharing externally
+- code sign binaries (Windows Authenticode)
 
 ### Hardened production build (Nuitka)
 Use Nuitka builds for stronger reverse-engineering resistance of Python logic.

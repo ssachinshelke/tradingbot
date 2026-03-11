@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260311-1">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260311-2">
 </head>
 <body>
   <header class="topbar">
@@ -13,21 +13,22 @@
       <span class="ws-dot" id="wsDot"></span>
     </div>
     <div class="topbar-right">
+      <button id="shutdownBtn" class="btn-sm btn-muted">Exit App</button>
       <span class="pnl-badge" id="headerPnl">P/L: 0.00</span>
       <span class="lic-badge" id="headerLic">License: ...</span>
     </div>
   </header>
 
   <nav class="tabs" id="tabNav">
-    <button class="tab active" data-tab="trading">Trading</button>
-    <button class="tab" data-tab="accounts">Accounts</button>
+    <button class="tab active" data-tab="accounts">Accounts</button>
+    <button class="tab" data-tab="license">License</button>
+    <button class="tab" data-tab="trading">Trading</button>
     <button class="tab" data-tab="book">Live Book</button>
     <button class="tab" data-tab="history">History</button>
-    <button class="tab" data-tab="license">License</button>
   </nav>
 
   <!-- ─── TRADING TAB ─────────────────────────────────────── -->
-  <section class="panel active" id="panel-trading">
+  <section class="panel" id="panel-trading">
     <div class="panel-header">
       <h2>Place Orders</h2>
       <p class="sub">Add one row per account. Different orders per account are supported. All execute in parallel.</p>
@@ -57,7 +58,7 @@
   </section>
 
   <!-- ─── ACCOUNTS TAB ────────────────────────────────────── -->
-  <section class="panel" id="panel-accounts">
+  <section class="panel active" id="panel-accounts">
     <div class="panel-header">
       <h2>Manage Accounts</h2>
       <p class="sub" id="accountLimitHint">Max 2 accounts allowed in this license build.</p>
@@ -81,6 +82,7 @@
     </div>
     <form id="accountImportForm" class="acc-form">
       <input name="file_path" placeholder="account.json" value="account.json">
+      <input id="accountImportFile" type="file" accept=".json,application/json">
       <button type="submit" class="btn-sm btn-accent">Import Accounts</button>
     </form>
     <div class="sub" id="accountImportStatus"></div>
@@ -195,22 +197,19 @@
     <div class="sub">Share generated request file with vendor to receive signed license file.</div>
     <div class="lic-form">
       <input id="licensePath" placeholder="C:\path\to\license.json" class="lic-input">
+      <input id="licenseFile" type="file" accept=".json,application/json">
       <button id="activateLicenseBtn" class="btn-sm btn-accent">Activate</button>
       <button id="refreshLicenseBtn" class="btn-sm btn-muted">Refresh</button>
     </div>
     <div class="result-box" id="licenseResult"></div>
 
     <div class="panel-header" style="margin-top:14px">
-      <h2>Backend Logs</h2>
-      <p class="sub">Every run writes a file to the local <code>logs</code> folder.</p>
+      <h2>Logs</h2>
+      <p class="sub">Runtime logs are stored at <code>logs/ui_backend.log</code> and rotate daily (2-day retention).</p>
     </div>
-    <div class="book-toolbar">
-      <button id="refreshLogsBtn" class="btn-sm btn-muted">Refresh Logs</button>
-      <span id="logsStatus" class="status-text"></span>
-    </div>
-    <div class="result-box" id="logsResult"></div>
+    <div class="sub" id="logsStatus">No action required for normal users.</div>
   </section>
 
-  <script src="/ui/app.js?v=20260311-1"></script>
+  <script src="/ui/app.js?v=20260311-2"></script>
 </body>
 </html>

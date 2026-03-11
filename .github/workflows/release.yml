@@ -1,4 +1,4 @@
-name: Build Cross-Platform Release
+name: Build Windows Release
 
 on:
   push:
@@ -67,54 +67,11 @@ jobs:
           path: release/*.zip
           if-no-files-found: error
 
-  build-macos:
-    name: Build macOS Bundle
-    runs-on: macos-latest
-    env:
-      MT5_LOGIN: "10000001"
-      MT5_PASSWORD: "ci-placeholder"
-      MT5_SERVER: "MetaQuotes-Demo"
-      LICENSE_PUBLIC_KEY_B64: ${{ secrets.LICENSE_PUBLIC_KEY_B64 }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Validate license public key secret
-        run: |
-          if [ -z "${LICENSE_PUBLIC_KEY_B64}" ]; then
-            echo "Missing GitHub secret LICENSE_PUBLIC_KEY_B64"
-            exit 1
-          fi
-
-      - name: Materialize license public key file
-        run: |
-          printf "%s" "${LICENSE_PUBLIC_KEY_B64}" > license_public_key.b64.txt
-
-      - name: Build release zip (macOS)
-        run: |
-          chmod +x ./scripts/build_macos_bundle.sh
-          VERSION="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || github.ref_name }}"
-          if [ -z "$VERSION" ]; then VERSION="manual"; fi
-          ./scripts/build_macos_bundle.sh "$VERSION"
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-release
-          path: release/*.zip
-          if-no-files-found: error
-
   publish-release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
     needs:
       - build-windows
-      - build-macos
     runs-on: ubuntu-latest
     steps:
       - name: Download Windows artifact
@@ -123,17 +80,10 @@ jobs:
           name: windows-release
           path: dist-assets/windows
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-release
-          path: dist-assets/macos
-
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
           files: |
             dist-assets/windows/*.zip
-            dist-assets/macos/*.zip
           generate_release_notes: true

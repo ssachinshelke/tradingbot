@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from functools import partial
+import json
 import logging
+import os
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -19,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .api_models import (
     AccountImportRequest,
+    AccountImportContentRequest,
     AccountImportResponse,
     AccountPayload,
     ActiveBookResponse,
@@ -28,6 +34,7 @@ from .api_models import (
     HealthRequest,
     HealthResponse,
     LicenseActivateRequest,
+    LicenseActivateContentRequest,
     LicenseRequestCreateRequest,
     LicenseRequestCreateResponse,
     LicenseStatusResponse,
@@ -61,15 +68,20 @@ class WebSocketHub:
     def __init__(self) -> None:
         self._clients: set[WebSocket] = set()
         self._lock = asyncio.Lock()
+        self._last_client_activity = datetime.now(timezone.utc)
+        self._ever_had_client = False
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         async with self._lock:
             self._clients.add(websocket)
+            self._last_client_activity = datetime.now(timezone.utc)
+            self._ever_had_client = True
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
             self._clients.discard(websocket)
+            self._last_client_activity = datetime.now(timezone.utc)
 
     async def broadcast(self, payload: dict[str, Any]) -> None:
         async with self._lock:
@@ -90,6 +102,18 @@ class WebSocketHub:
             except Exception:
                 pass
 
+    async def client_count(self) -> int:
+        async with self._lock:
+            return len(self._clients)
+
+    async def idle_seconds(self) -> float:
+        async with self._lock:
+            return max((datetime.now(timezone.utc) - self._last_client_activity).total_seconds(), 0.0)
+
+    @property
+    def ever_had_client(self) -> bool:
+        return self._ever_had_client
+
 
 service = TradingUIService()
 license_manager = LicenseManager(trusted_time_provider=service.get_trusted_time_utc)
@@ -102,6 +126,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup: launch realtime broadcast loop. Shutdown: cancel it and drain the thread pool."""
 
     async def realtime_loop() -> None:
+        idle_shutdown_sec = max(5, int(os.getenv("UI_NO_CLIENT_SHUTDOWN_SECONDS", "25") or "25"))
         while True:
             try:
                 snapshot = await _run_blocking(service.get_active_book)
@@ -127,6 +152,13 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                     raise
                 except Exception:
                     pass
+            try:
+                count = await hub.client_count()
+                if hub.ever_had_client and count == 0 and (await hub.idle_seconds()) >= idle_shutdown_sec:
+                    logger.info("No UI clients for %ss, shutting down app process", idle_shutdown_sec)
+                    os._exit(0)
+            except Exception:
+                pass
             await asyncio.sleep(1.0)
 
     task = asyncio.create_task(realtime_loop())
@@ -155,6 +187,16 @@ app.add_middleware(
 @app.get("/api/system/ping", response_model=ApiResponse)
 def ping() -> ApiResponse:
     return ApiResponse(ok=True, message="pong")
+
+
+@app.post("/api/system/shutdown", response_model=ApiResponse)
+async def system_shutdown() -> ApiResponse:
+    async def _die() -> None:
+        await asyncio.sleep(0.4)
+        os._exit(0)
+
+    asyncio.create_task(_die())
+    return ApiResponse(ok=True, message="Shutting down")
 
 
 @app.get("/api/accounts")
@@ -203,6 +245,32 @@ async def import_accounts_file(req: AccountImportRequest) -> AccountImportRespon
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     logger.info(
         "import-accounts success: imported=%s skipped=%s file=%s",
+        out.get("imported_count"),
+        out.get("skipped_count"),
+        out.get("file_path"),
+    )
+    return AccountImportResponse(ok=True, **out)
+
+
+@app.post("/api/accounts/import-content", response_model=AccountImportResponse)
+async def import_accounts_content(req: AccountImportContentRequest) -> AccountImportResponse:
+    try:
+        raw_bytes = base64.b64decode(req.content_b64.encode("utf-8"), validate=True)
+        payload = json.loads(raw_bytes.decode("utf-8", errors="strict"))
+        out = await _run_blocking(
+            service.import_accounts_from_data,
+            raw=payload,
+            source_path=Path((req.filename or "account.json").strip() or "account.json"),
+        )
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid account JSON upload: {exc}") from exc
+    except asyncio.CancelledError as exc:
+        raise HTTPException(status_code=503, detail="Server shutting down") from exc
+    except Exception as exc:
+        logger.exception("import-accounts-content failed: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    logger.info(
+        "import-accounts-content success: imported=%s skipped=%s file=%s",
         out.get("imported_count"),
         out.get("skipped_count"),
         out.get("file_path"),
@@ -464,6 +532,33 @@ def license_status() -> LicenseStatusResponse:
 @app.post("/api/license/activate", response_model=LicenseStatusResponse)
 def license_activate(req: LicenseActivateRequest) -> LicenseStatusResponse:
     status = license_manager.activate_from_file(req.license_key_path)
+    return LicenseStatusResponse(
+        ok=status.status == "license_valid",
+        status=status.status,  # type: ignore[arg-type]
+        expires_at=status.expires_at,
+        trial_days_left=status.trial_days_left,
+        machine_id=status.machine_id,
+        error=status.error,
+    )
+
+
+@app.post("/api/license/activate-content", response_model=LicenseStatusResponse)
+def license_activate_content(req: LicenseActivateContentRequest) -> LicenseStatusResponse:
+    try:
+        raw_bytes = base64.b64decode(req.content_b64.encode("utf-8"), validate=True)
+        raw_text = raw_bytes.decode("utf-8", errors="strict")
+    except (UnicodeDecodeError, binascii.Error) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid license file upload: {exc}") from exc
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as tf:
+        tf.write(raw_text)
+        tmp_path = tf.name
+    try:
+        status = license_manager.activate_from_file(tmp_path)
+    finally:
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            pass
     return LicenseStatusResponse(
         ok=status.status == "license_valid",
         status=status.status,  # type: ignore[arg-type]

@@ -305,6 +305,9 @@ class TradingUIService:
         if not src.exists():
             raise ValueError(f"Accounts file not found: {src}")
         raw = json.loads(src.read_text(encoding="utf-8"))
+        return self.import_accounts_from_data(raw, source_path=src)
+
+    def import_accounts_from_data(self, raw: Any, source_path: Path | None = None) -> dict[str, Any]:
         if not isinstance(raw, list):
             raise ValueError("Accounts import file must contain a JSON array")
         imported: list[AccountConfig] = []
@@ -339,10 +342,11 @@ class TradingUIService:
             raise ValueError(
                 f"Import has {len(imported)} accounts, but max allowed is {self._max_ui_accounts}."
             )
-        self._accounts_file = src
+        if source_path is not None:
+            self._accounts_file = source_path
         self._save_accounts(imported)
         return {
-            "file_path": str(src.resolve()),
+            "file_path": str((source_path or self._accounts_file).resolve()),
             "imported_count": len(imported),
             "skipped_count": skipped,
             "max_accounts": self._max_ui_accounts,

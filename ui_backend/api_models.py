@@ -39,6 +39,11 @@ class AccountImportRequest(BaseModel):
     file_path: str = "account.json"
 
 
+class AccountImportContentRequest(BaseModel):
+    filename: str = "account.json"
+    content_b64: str
+
+
 class AccountImportResponse(ApiResponse):
     file_path: str
     imported_count: int
@@ -179,6 +184,11 @@ class LicenseStatusResponse(ApiResponse):
 
 class LicenseActivateRequest(BaseModel):
     license_key_path: str
+
+
+class LicenseActivateContentRequest(BaseModel):
+    filename: str = "license.json"
+    content_b64: str
 
 
 class LicenseRequestCreateRequest(BaseModel):

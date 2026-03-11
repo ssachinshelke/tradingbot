@@ -30,6 +30,9 @@ const API = {
   upsertAccount(p)        { return this.post('/api/accounts', p); },
   createPortable(p)       { return this.post('/api/accounts/create-portable', p); },
   importAccounts(filePath = 'account.json') { return this.post('/api/accounts/import-file', { file_path: filePath }); },
+  importAccountsContent(filename, contentB64) {
+    return this.post('/api/accounts/import-content', { filename, content_b64: contentB64 });
+  },
   deleteAccount(name)     { return this.del(`/api/accounts/${encodeURIComponent(name)}`); },
   healthcheckAll()        { return this.post('/api/healthcheck', {}); },
   healthcheckOne(name)    { return this.get(`/api/healthcheck/${encodeURIComponent(name)}`); },
@@ -56,6 +59,9 @@ const API = {
   },
   licenseStatus()         { return this.get('/api/license/status'); },
   activateLicense(path)   { return this.post('/api/license/activate', { license_key_path: path }); },
+  activateLicenseContent(filename, contentB64) {
+    return this.post('/api/license/activate-content', { filename, content_b64: contentB64 });
+  },
   createLicenseRequest(outputPath = 'license_request.json') {
     return this.post('/api/license/request', { output_path: outputPath });
   },
@@ -74,6 +80,9 @@ const API = {
   discoverMT5() {
     return this.get('/api/system/mt5-discover');
   },
+  shutdown() {
+    return this.post('/api/system/shutdown', {});
+  },
 };
 
 // ── State ──────────────────────────────────────────────────
@@ -90,6 +99,10 @@ const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
 function setResult(id, v) { const el = document.getElementById(id); if (el) el.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2); }
+
+function toB64(text) {
+  return btoa(unescape(encodeURIComponent(text)));
+}
 
 function profitClass(val) {
   const n = Number(val);
@@ -158,6 +171,11 @@ function renderAccounts() {
     else if (typeof h === 'string') healthHtml = `<span class="health-fail">${h}</span>`;
 
     const tr = document.createElement('tr');
+    tr.className = 'account-row';
+    tr.dataset.name = acc.name;
+    tr.dataset.login = String(acc.mt5_login || '');
+    tr.dataset.server = acc.mt5_server || '';
+    tr.dataset.path = acc.mt5_path || '';
     tr.innerHTML = `
       <td>${esc(acc.name)}</td>
       <td>${acc.mt5_login}</td>
@@ -193,7 +211,18 @@ function renderHistoryAccountFilter() {
 
 $('#accountsTable').addEventListener('click', async e => {
   const btn = e.target.closest('button');
-  if (!btn) return;
+  if (!btn) {
+    const row = e.target.closest('tr.account-row');
+    if (!row) return;
+    const form = $('#accountForm');
+    if (!form) return;
+    form.querySelector('[name="name"]').value = row.dataset.name || '';
+    form.querySelector('[name="mt5_login"]').value = row.dataset.login || '';
+    form.querySelector('[name="mt5_server"]').value = row.dataset.server || '';
+    form.querySelector('[name="mt5_path"]').value = row.dataset.path || '';
+    setText('accountLimitStatus', `Editing ${row.dataset.name || 'account'} - click Save Account to update`);
+    return;
+  }
   const name = btn.dataset.name;
   if (btn.classList.contains('hc-one')) {
     const done = showSpinner(btn);
@@ -245,10 +274,18 @@ $('#accountImportForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target);
   const filePath = String(f.get('file_path') || '').trim() || 'account.json';
+  const uploadInput = $('#accountImportFile');
   const submitBtn = e.target.querySelector('button[type="submit"]');
   const done = showSpinner(submitBtn);
   try {
-    const out = await API.importAccounts(filePath);
+    let out;
+    const chosenFile = uploadInput?.files?.[0];
+    if (chosenFile) {
+      const txt = await chosenFile.text();
+      out = await API.importAccountsContent(chosenFile.name || 'account.json', toB64(txt));
+    } else {
+      out = await API.importAccounts(filePath);
+    }
     setText(
       'accountImportStatus',
       `Imported ${out.imported_count || 0} account(s)`
@@ -288,6 +325,13 @@ $('#portableForm').addEventListener('submit', async e => {
   done();
 });
 
+$('#accountImportFile')?.addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const pathInput = $('#accountImportForm [name="file_path"]');
+  if (pathInput) pathInput.value = f.name || 'account.json';
+});
+
 async function initPortableDefaults() {
   const sourceInput = $('#portableForm [name="source_dir"]');
   const accPathInput = $('#accountForm [name="mt5_path"]');
@@ -311,21 +355,12 @@ async function initPortableDefaults() {
     }
     if (hint) {
       const hasPortable = Number(res.portable_count || 0) >= DEFAULT_PORTABLE_NAMES.length;
-      const createBtn = $('#portableForm button[type="submit"]');
       if (hasPortable) {
-        hint.textContent = `Portable folders already created (${(res.portable_items || []).join(', ')}). You can skip this step.`;
-        if (createBtn) {
-          createBtn.disabled = true;
-          createBtn.title = 'Portable setup already exists';
-        }
+        hint.textContent = `Existing portable folders detected (${(res.portable_items || []).join(', ')}). Click create again to refresh/rebuild if needed.`;
       } else if (res.install_required) {
         hint.textContent = 'MT5 not detected. Please install MetaTrader 5, then retry auto-create.';
       } else {
         hint.textContent = `Detected ${res.count} terminal path(s). Auto-filled source path.`;
-        if (createBtn) {
-          createBtn.disabled = false;
-          createBtn.title = '';
-        }
       }
     }
   } catch (err) {
@@ -894,16 +929,18 @@ async function refreshHistoryMiniOnly() {
 }
 
 async function refreshLogs() {
-  $('#logsStatus').textContent = 'Loading...';
+  const statusEl = $('#logsStatus');
+  if (!statusEl) return;
+  statusEl.textContent = 'Checking log status...';
   try {
     const res = await API.systemLogs(20);
-    setResult('logsResult', {
-      folder: 'logs',
-      files: res.items || [],
-    });
-    $('#logsStatus').textContent = `${(res.items || []).length} file(s)`;
+    const files = res.items || [];
+    const latest = files.length ? files[0] : null;
+    statusEl.textContent = latest
+      ? `Latest log: ${latest.name} (updated ${latest.modified_at_utc})`
+      : 'No logs yet. Logs will appear after first backend actions.';
   } catch (err) {
-    $('#logsStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
+    statusEl.textContent = `Error reading logs: ${err.detail || err.message || String(err)}`;
   }
 }
 
@@ -934,7 +971,15 @@ function connectWS() {
 async function refreshLicense(showResult = true) {
   try {
     const s = await API.licenseStatus();
-    if (showResult) setResult('licenseResult', s);
+    if (showResult) {
+      if (s.ok) {
+        const exp = s.expires_at ? new Date(s.expires_at).toISOString() : 'n/a';
+        const trial = s.trial_days_left === null || s.trial_days_left === undefined ? 'n/a' : s.trial_days_left;
+        setResult('licenseResult', `License active\nStatus: ${s.status}\nExpires (UTC): ${exp}\nTrial days left: ${trial}\nMachine ID: ${s.machine_id || 'n/a'}`);
+      } else {
+        setResult('licenseResult', `License not active yet\nStatus: ${s.status}\nReason: ${s.error || 'Activate a signed license file to enable trading.'}\nMachine ID: ${s.machine_id || 'n/a'}`);
+      }
+    }
     const badge = document.getElementById('headerLic');
     badge.textContent = `License: ${s.status}`;
     badge.style.color = s.ok ? 'var(--green)' : 'var(--red)';
@@ -945,11 +990,25 @@ async function refreshLicense(showResult = true) {
 
 $('#activateLicenseBtn').addEventListener('click', async function () {
   const p = $('#licensePath').value.trim();
-  if (!p) { setResult('licenseResult', 'Enter license file path.'); return; }
+  const fileInput = $('#licenseFile');
+  const chosenFile = fileInput?.files?.[0];
+  if (!p && !chosenFile) { setResult('licenseResult', 'Provide license file path or choose a license JSON file.'); return; }
   const done = showSpinner(this);
   try {
-    const res = await API.activateLicense(p);
-    setResult('licenseResult', res);
+    let res;
+    if (chosenFile) {
+      const txt = await chosenFile.text();
+      res = await API.activateLicenseContent(chosenFile.name || 'license.json', toB64(txt));
+    } else {
+      res = await API.activateLicense(p);
+    }
+    if (res.ok) {
+      const exp = res.expires_at ? new Date(res.expires_at).toISOString() : 'n/a';
+      const trial = res.trial_days_left === null || res.trial_days_left === undefined ? 'n/a' : res.trial_days_left;
+      setResult('licenseResult', `License activated successfully\nStatus: ${res.status}\nExpires (UTC): ${exp}\nTrial days left: ${trial}`);
+    } else {
+      setResult('licenseResult', `Activation failed\nStatus: ${res.status}\nReason: ${res.error || 'Unknown error'}`);
+    }
   } catch (err) { setResult('licenseResult', { error: err.detail || err.message || JSON.stringify(err) }); }
   done();
   await refreshLicense(false);
@@ -960,25 +1019,35 @@ $('#generateLicenseReqBtn').addEventListener('click', async function () {
   const done = showSpinner(this);
   try {
     const res = await API.createLicenseRequest(p);
-    setResult('licenseResult', {
-      ok: true,
-      message: 'License request file generated. Share this file with vendor.',
-      file_path: res.file_path,
-      machine_hash: res.machine_hash,
-      requested_at_utc: res.requested_at_utc,
-    });
+    setResult(
+      'licenseResult',
+      `License request generated successfully\nFile: ${res.file_path}\nMachine hash: ${res.machine_hash}\nRequested at (UTC): ${res.requested_at_utc}\n\nShare this file with vendor to receive signed license.`
+    );
   } catch (err) {
     setResult('licenseResult', { error: err.detail || err.error || err.message || JSON.stringify(err) });
   }
   done();
-  await refreshLicense();
+  await refreshLicense(false);
+});
+
+$('#licenseFile')?.addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const p = $('#licensePath');
+  if (p) p.value = f.name || 'license.json';
 });
 
 $('#refreshLicenseBtn').addEventListener('click', refreshLicense);
 $('#refreshHistoryBtn').addEventListener('click', refreshHistory);
-$('#refreshLogsBtn').addEventListener('click', refreshLogs);
+$('#refreshLogsBtn')?.addEventListener('click', refreshLogs);
 const historyMiniBtn = $('#refreshHistoryMiniBtn');
 if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistoryMiniOnly);
+$('#shutdownBtn')?.addEventListener('click', async () => {
+  try {
+    await API.shutdown();
+  } catch {}
+  window.close();
+});
 
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {

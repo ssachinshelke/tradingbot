@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging.config
 import multiprocessing as mp
 from pathlib import Path
@@ -42,16 +41,22 @@ def _build_log_config(log_file: Path) -> dict[str, Any]:
                 "stream": "ext://sys.stdout",
             },
             "file_default": {
-                "class": "logging.FileHandler",
+                "class": "logging.handlers.TimedRotatingFileHandler",
                 "formatter": "default",
                 "filename": str(log_file),
                 "encoding": "utf-8",
+                "when": "midnight",
+                "interval": 1,
+                "backupCount": 2,
             },
             "file_access": {
-                "class": "logging.FileHandler",
+                "class": "logging.handlers.TimedRotatingFileHandler",
                 "formatter": "access",
                 "filename": str(log_file),
                 "encoding": "utf-8",
+                "when": "midnight",
+                "interval": 1,
+                "backupCount": 2,
             },
         },
         "loggers": {
@@ -68,9 +73,8 @@ def main() -> None:
         return
     logs_dir = Path("logs")
     logs_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = logs_dir / f"ui_backend_{ts}.log"
-    crash_file = logs_dir / f"bootstrap_crash_{ts}.log"
+    log_file = logs_dir / "ui_backend.log"
+    crash_file = logs_dir / "bootstrap_crash.log"
     url = "http://127.0.0.1:8787"
     try:
         from ui_backend.server import app
