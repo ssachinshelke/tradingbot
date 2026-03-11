@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 import uuid
@@ -383,10 +384,28 @@ class LicenseManager:
 
     def _load_public_key(self) -> Ed25519PublicKey | None:
         key_b64 = os.getenv("LICENSE_PUBLIC_KEY_B64", "").strip()
-        if not key_b64:
-            return None
-        key_bytes = base64.b64decode(key_b64.encode("utf-8"))
-        return Ed25519PublicKey.from_public_bytes(key_bytes)
+        if key_b64:
+            key_bytes = base64.b64decode(key_b64.encode("utf-8"))
+            return Ed25519PublicKey.from_public_bytes(key_bytes)
+
+        candidates: list[Path] = [
+            Path("license_public_key.b64.txt"),
+            Path("vendor_public_key.b64.txt"),
+        ]
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).resolve().parent / "license_public_key.b64.txt")
+            candidates.append(Path(sys.executable).resolve().parent / "vendor_public_key.b64.txt")
+
+        for p in candidates:
+            try:
+                if p.exists():
+                    raw = p.read_text(encoding="utf-8").strip()
+                    if raw:
+                        key_bytes = base64.b64decode(raw.encode("utf-8"))
+                        return Ed25519PublicKey.from_public_bytes(key_bytes)
+            except Exception:
+                continue
+        return None
 
     def _verify_license_document(
         self,
@@ -395,7 +414,7 @@ class LicenseManager:
     ) -> tuple[bool, str | None]:
         pub = self._load_public_key()
         if pub is None:
-            return False, "Missing LICENSE_PUBLIC_KEY_B64"
+            return False, "Missing license public key (set LICENSE_PUBLIC_KEY_B64 or provide license_public_key.b64.txt)"
         payload = doc.get("payload")
         signature_b64 = str(doc.get("signature", ""))
         if not isinstance(payload, dict) or not signature_b64:
@@ -467,12 +486,15 @@ class LicenseManager:
         return True, None
 
     def activate_from_file(self, path: str) -> LicenseStatus:
-        file_path = Path(path)
+        file_path = Path(path).expanduser()
+        # Allow users to pass a directory; default to license.json inside it.
+        if file_path.exists() and file_path.is_dir():
+            file_path = file_path / "license.json"
         if not file_path.exists():
             return LicenseStatus(
                 status="license_invalid",
                 machine_id=self.machine_id,
-                error=f"License file not found: {path}",
+                error=f"License file not found: {file_path}",
             )
         try:
             ref_now, _ = self._reference_now()

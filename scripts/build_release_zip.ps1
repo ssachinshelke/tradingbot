@@ -33,6 +33,9 @@ if (!(Test-Path $exePath)) {
     throw "Build finished but executable not found at: $exePath"
 }
 Copy-Item $exePath -Destination (Join-Path $bundleDir "Tradingm5UI.exe")
+if (Test-Path "license_public_key.b64.txt") {
+    Copy-Item "license_public_key.b64.txt" -Destination (Join-Path $bundleDir "license_public_key.b64.txt")
+}
 
 $notesPath = Join-Path $bundleDir "README_RELEASE.txt"
 @"

@@ -352,6 +352,7 @@ What customer must share to get license:
 Notes:
 - private key must stay with vendor only
 - public key goes to `LICENSE_PUBLIC_KEY_B64` on client side
+- release bundles also include `license_public_key.b64.txt` so runtime validation works without manual env setup
 - OS/hardware changes are detected via machine-bound hash (license mismatch after major change)
 - optional server-side validation remains supported:
   - `LICENSE_VALIDATION_URL`

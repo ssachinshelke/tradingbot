@@ -931,14 +931,16 @@ function connectWS() {
 }
 
 // ── License ────────────────────────────────────────────────
-async function refreshLicense() {
+async function refreshLicense(showResult = true) {
   try {
     const s = await API.licenseStatus();
-    setResult('licenseResult', s);
+    if (showResult) setResult('licenseResult', s);
     const badge = document.getElementById('headerLic');
     badge.textContent = `License: ${s.status}`;
     badge.style.color = s.ok ? 'var(--green)' : 'var(--red)';
-  } catch (err) { setResult('licenseResult', { error: String(err) }); }
+  } catch (err) {
+    if (showResult) setResult('licenseResult', { error: String(err) });
+  }
 }
 
 $('#activateLicenseBtn').addEventListener('click', async function () {
@@ -950,7 +952,7 @@ $('#activateLicenseBtn').addEventListener('click', async function () {
     setResult('licenseResult', res);
   } catch (err) { setResult('licenseResult', { error: err.detail || err.message || JSON.stringify(err) }); }
   done();
-  await refreshLicense();
+  await refreshLicense(false);
 });
 
 $('#generateLicenseReqBtn').addEventListener('click', async function () {

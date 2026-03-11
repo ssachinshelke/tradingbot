@@ -48,6 +48,11 @@ jobs:
             throw "Missing GitHub secret LICENSE_PUBLIC_KEY_B64"
           }
 
+      - name: Materialize license public key file
+        shell: powershell
+        run: |
+          Set-Content -Path "license_public_key.b64.txt" -Value $env:LICENSE_PUBLIC_KEY_B64 -NoNewline
+
       - name: Build release zip (Windows)
         shell: powershell
         run: |
@@ -85,6 +90,10 @@ jobs:
             echo "Missing GitHub secret LICENSE_PUBLIC_KEY_B64"
             exit 1
           fi
+
+      - name: Materialize license public key file
+        run: |
+          printf "%s" "${LICENSE_PUBLIC_KEY_B64}" > license_public_key.b64.txt
 
       - name: Build release zip (macOS)
         run: |

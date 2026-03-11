@@ -26,6 +26,9 @@ mkdir -p "$BUNDLE_DIR"
 
 cp "dist/Tradingm5UI" "$BUNDLE_DIR/Tradingm5UI"
 chmod +x "$BUNDLE_DIR/Tradingm5UI"
+if [[ -f "license_public_key.b64.txt" ]]; then
+  cp "license_public_key.b64.txt" "$BUNDLE_DIR/license_public_key.b64.txt"
+fi
 
 cat > "$BUNDLE_DIR/README_RELEASE.txt" <<'EOF'
 Tradingm5UI Release Bundle (macOS)
