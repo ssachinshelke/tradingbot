@@ -408,7 +408,31 @@ async def system_preflight() -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Server shutting down") from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"ok": True, **payload}
+    trusted_market_time_utc: str | None = None
+    try:
+        t = await _run_blocking(service.get_trusted_time_utc)
+        if t is not None:
+            trusted_market_time_utc = t.astimezone(timezone.utc).isoformat()
+    except Exception:
+        trusted_market_time_utc = None
+
+    return {
+        "ok": True,
+        **payload,
+        "license": {
+            "status": lic.status,
+            "trial_days_left": lic.trial_days_left,
+            "expires_at_utc": lic.expires_at.astimezone(timezone.utc).isoformat() if lic.expires_at else None,
+            "machine_id": lic.machine_id,
+            "error": lic.error,
+        },
+        "trusted_market_time_utc": trusted_market_time_utc,
+        "license_protection_notes": [
+            "Machine-bound fingerprint ties license/trial to hardware tuple.",
+            "Multiple integrity anchors (registry + hidden file + signed state chain) detect tamper/reformat attempts.",
+            "Trusted market time checks block clock rollback when strict mode is enabled.",
+        ],
+    }
 
 
 @app.get("/api/system/mt5-discover")

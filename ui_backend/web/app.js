@@ -115,9 +115,16 @@ function renderPreflightResult(res) {
   const firstIssue = checks.find(c => !c.ok);
   const statusEl = $('#preflightStatus');
   if (statusEl) {
+    const lic = res.license || {};
+    const trialDays = lic.trial_days_left;
+    const marketTime = res.trusted_market_time_utc || 'unavailable';
+    const protection = Array.isArray(res.license_protection_notes) ? res.license_protection_notes.join(' ') : '';
     statusEl.textContent =
       `Checks: pass=${Number(summary.pass || 0)}, fail=${Number(summary.fail || 0)}, warn=${Number(summary.warn || 0)}`
-      + (firstIssue ? ` | ${firstIssue.message}` : '');
+      + (firstIssue ? ` | ${firstIssue.message}` : '')
+      + ` | 1) Trial days pending: ${trialDays ?? 'n/a'}`
+      + ` | 2) Trusted market date/time (UTC): ${marketTime}`
+      + ` | 3) License hardening: ${protection}`;
   }
 }
 
@@ -347,7 +354,10 @@ function populateAccountSelects() {
   $$('.order-row select[data-field="account"]').forEach(sel => {
     const current = sel.value;
     sel.innerHTML = '<option value="">-- account --</option>' +
-      state.accounts.map(a => `<option value="${esc(a.name)}"${a.name === current ? ' selected' : ''}>${esc(a.name)}</option>`).join('');
+      state.accounts.map(a => {
+        const label = a.mt5_server ? `${a.name} (${a.mt5_server})` : a.name;
+        return `<option value="${esc(a.name)}"${a.name === current ? ' selected' : ''}>${esc(label)}</option>`;
+      }).join('');
   });
 }
 
@@ -470,9 +480,18 @@ $('#submitAllOrdersBtn').addEventListener('click', async function () {
     const res = await API.submitPlan(rows);
     const okCount = (res.results || []).filter(r => r.ok).length;
     const total = (res.results || []).length;
-    setText('tradingStatus', `Submitted. Success: ${okCount}/${total}`);
-    $('#orderRows').innerHTML = '';
-    createOrderRow();
+    const failed = (res.results || []).filter(r => !r.ok);
+    if (failed.length > 0) {
+      const failedMsg = failed
+        .slice(0, 3)
+        .map(r => `${r.name || r.account || 'account'} ${r.symbol || ''}: ${r.error || 'Unknown failure'}`)
+        .join(' | ');
+      setText('tradingStatus', `Submitted. Success: ${okCount}/${total}. Failed: ${failedMsg}`);
+    } else {
+      setText('tradingStatus', `Submitted. Success: ${okCount}/${total}`);
+      $('#orderRows').innerHTML = '';
+      createOrderRow();
+    }
   } catch (err) {
     setText('tradingStatus', err.detail || err.error || err.message || String(err));
   }
