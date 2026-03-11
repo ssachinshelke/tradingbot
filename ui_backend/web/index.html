@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tradingm5 Dashboard</title>
-  <link rel="stylesheet" href="/ui/styles.css?v=20260311-2">
+  <link rel="stylesheet" href="/ui/styles.css?v=20260311-7">
 </head>
 <body>
   <header class="topbar">
@@ -21,41 +21,9 @@
 
   <nav class="tabs" id="tabNav">
     <button class="tab active" data-tab="accounts">Accounts</button>
-    <button class="tab" data-tab="license">License</button>
     <button class="tab" data-tab="trading">Trading</button>
-    <button class="tab" data-tab="book">Live Book</button>
     <button class="tab" data-tab="history">History</button>
   </nav>
-
-  <!-- ─── TRADING TAB ─────────────────────────────────────── -->
-  <section class="panel" id="panel-trading">
-    <div class="panel-header">
-      <h2>Place Orders</h2>
-      <p class="sub">Add one row per account. Different orders per account are supported. All execute in parallel.</p>
-    </div>
-    <div class="order-builder">
-      <div class="order-toolbar">
-        <button id="addOrderRowBtn" class="btn-sm btn-accent">+ Add Order Row</button>
-        <button id="submitAllOrdersBtn" class="btn-sm btn-green">Submit All Orders</button>
-        <button id="clearOrderRowsBtn" class="btn-sm btn-muted">Clear All</button>
-      </div>
-      <div class="sub">Tip: use the row-level Find button to search valid symbols for that account.</div>
-      <div id="orderRows" class="order-rows"></div>
-    </div>
-    <div class="sub" id="tradingStatus"></div>
-
-    <div class="panel-header" style="margin-top:12px">
-      <h3>Preflight</h3>
-      <p class="sub">Run one-click readiness checks before placing live orders.</p>
-    </div>
-    <div class="book-toolbar">
-      <button id="runPreflightBtn" class="btn-sm btn-accent">Run Preflight</button>
-      <span id="preflightBadge" class="status-text">Status: unknown</span>
-    </div>
-    <div class="sub" id="preflightStatus"></div>
-
-    <p class="sub">Advanced JSON plan is available via API endpoint: <code>/api/trade/submit-plan</code></p>
-  </section>
 
   <!-- ─── ACCOUNTS TAB ────────────────────────────────────── -->
   <section class="panel active" id="panel-accounts">
@@ -64,95 +32,168 @@
       <p class="sub" id="accountLimitHint">Max 2 accounts allowed in this license build.</p>
       <p class="sub">Recommended flow: (1) Auto-create portable folders, (2) fill <code>account.json</code>, (3) Import Accounts.</p>
     </div>
-
-    <div class="panel-header" style="margin-top:10px">
-      <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
-      <p class="sub">Creates 2 portable copies automatically in local <code>mt5-portable</code> folder and updates <code>account.json</code>.</p>
-    </div>
-    <form id="portableForm" class="acc-form">
-      <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
-      <button type="submit" class="btn-sm btn-accent">Create 2 Portable Folders</button>
-    </form>
-    <div class="sub" id="portableHint"></div>
-    <div class="sub" id="portableStatus"></div>
-
-    <div class="panel-header" style="margin-top:10px">
-      <h3>Import Accounts JSON</h3>
-      <p class="sub">Load all accounts from a local JSON file (default: <code>account.json</code>).</p>
-    </div>
-    <form id="accountImportForm" class="acc-form">
-      <input name="file_path" placeholder="account.json" value="account.json">
-      <input id="accountImportFile" type="file" accept=".json,application/json">
-      <button type="submit" class="btn-sm btn-accent">Import Accounts</button>
-    </form>
-    <div class="sub" id="accountImportStatus"></div>
-
-    <div class="panel-header" style="margin-top:12px">
-      <h3>Manage Accounts</h3>
-    </div>
-    <form id="accountForm" class="acc-form">
-      <input name="name" placeholder="account name (optional)">
-      <input name="mt5_login" placeholder="login (number)" type="number" required>
-      <input name="mt5_password" placeholder="password" type="password" required>
-      <input name="mt5_server" placeholder="broker server" value="MetaQuotes-Demo" required>
-      <input name="mt5_path" placeholder="terminal64.exe path (auto-detected when possible)">
-      <button type="submit" class="btn-sm btn-accent">Save Account</button>
-    </form>
-    <div class="sub" id="accountLimitStatus"></div>
     <div class="acc-toolbar">
       <button id="healthcheckAllBtn" class="btn-sm btn-green">Healthcheck All</button>
       <span id="healthStatus" class="status-text"></span>
     </div>
-    <table id="accountsTable" class="tbl">
-      <thead><tr><th>Name</th><th>Login</th><th>Server</th><th>Health</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="sub" id="accountLimitStatus"></div>
+    <div class="ui-card" style="margin-top:10px">
+      <div class="book-toolbar" style="margin-top:0">
+        <button id="runPreflightBtn" class="btn-sm btn-accent">Run Preflight</button>
+        <span id="preflightBadge" class="status-text">Status: unknown</span>
+      </div>
+      <div class="sub" id="preflightStatus"></div>
+    </div>
+
+    <div class="section-grid">
+      <div class="ui-card">
+        <div class="panel-header" style="margin-top:2px">
+          <h3>Auto-Create Portable MT5 Folders (Windows)</h3>
+          <p class="sub">Creates 2 portable copies automatically in local <code>mt5-portable</code> folder and updates <code>account.json</code>.</p>
+        </div>
+        <form id="portableForm" class="acc-form">
+          <input name="source_dir" placeholder="source MT5 folder (contains terminal64.exe)" required>
+          <button id="portableBrowseBtn" type="button" class="btn-sm btn-muted">Browse MT5 EXE</button>
+          <input id="portableFileHidden" class="hidden-file-input" type="file" accept=".exe">
+          <button id="detectMt5Btn" type="button" class="btn-sm btn-muted">Detect MT5</button>
+          <button type="submit" class="btn-sm btn-accent">Create 2 Portable Folders</button>
+        </form>
+        <div class="sub" id="portableHint"></div>
+        <div class="sub" id="portableStatus"></div>
+      </div>
+
+      <div class="ui-card">
+        <div class="panel-header" style="margin-top:2px">
+          <h3>Import Accounts JSON</h3>
+          <p class="sub">Import from one path field. Browse once and last path is remembered locally.</p>
+        </div>
+        <form id="accountImportForm" class="acc-form">
+          <input id="accountImportPath" name="file_path" placeholder="account.json" value="account.json">
+          <button id="accountImportBrowseBtn" type="button" class="btn-sm btn-muted">Browse</button>
+          <input id="accountImportFileHidden" class="hidden-file-input" type="file" accept=".json,application/json">
+          <button type="submit" class="btn-sm btn-accent">Import Accounts</button>
+        </form>
+        <div class="sub" id="accountImportStatus"></div>
+      </div>
+    </div>
+
+    <details class="ui-card ui-collapsible" id="manageAccountsPanel">
+      <summary>Manage Accounts (advanced)</summary>
+      <div class="panel-header" style="margin-top:10px">
+        <p class="sub">Expand only when adding/editing/removing account details manually.</p>
+      </div>
+      <form id="accountForm" class="acc-form">
+        <input name="name" placeholder="account name (optional)">
+        <input name="mt5_login" placeholder="login (number)" type="number" required>
+        <input name="mt5_password" placeholder="password" type="password" required>
+        <input name="mt5_server" placeholder="broker server" value="MetaQuotes-Demo" required>
+        <input name="mt5_path" placeholder="terminal64.exe path (auto-detected when possible)">
+        <button type="submit" class="btn-sm btn-accent">Save Account</button>
+      </form>
+      <table id="accountsTable" class="tbl">
+        <thead><tr><th>Name</th><th>Login</th><th>Server</th><th>Health</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
+
+    <details class="ui-card ui-collapsible" style="margin-top:12px" open>
+      <summary>License & Activation</summary>
+      <div class="section-grid" style="margin-top:10px">
+        <div class="ui-card">
+          <div class="panel-header" style="margin-top:2px">
+            <h3>Generate Request</h3>
+          </div>
+          <div class="lic-form">
+            <input id="licenseReqPath" placeholder="license_request.json" class="lic-input" value="license_request.json">
+            <button id="generateLicenseReqBtn" class="btn-sm btn-muted">Generate Request</button>
+          </div>
+          <div class="sub">Share generated request file with vendor to receive signed license file.</div>
+        </div>
+        <div class="ui-card">
+          <div class="panel-header" style="margin-top:2px">
+            <h3>Activate License</h3>
+            <p class="sub">Use one path field with optional browse and remembered last path.</p>
+          </div>
+          <div class="lic-form">
+            <input id="licensePath" placeholder="C:\path\to\license.json" class="lic-input">
+            <button id="licenseBrowseBtn" type="button" class="btn-sm btn-muted">Browse</button>
+            <input id="licenseFileHidden" class="hidden-file-input" type="file" accept=".json,application/json">
+            <button id="activateLicenseBtn" class="btn-sm btn-accent">Activate</button>
+            <button id="refreshLicenseBtn" class="btn-sm btn-muted">Refresh</button>
+          </div>
+        </div>
+      </div>
+      <div class="ui-card" style="margin-top:10px">
+        <div class="panel-header" style="margin-bottom:6px">
+          <h3>License Status</h3>
+        </div>
+        <div class="result-box" id="licenseResult"></div>
+      </div>
+    </details>
+
+    <details class="ui-card ui-collapsible" style="margin-top:12px">
+      <summary>Logs (advanced)</summary>
+      <div class="panel-header" style="margin-top:10px">
+        <p class="sub">Runtime logs are stored at <code>logs/ui_backend.log</code> and rotate daily (2-day retention).</p>
+      </div>
+      <div class="sub" id="logsStatus">No action required for normal users.</div>
+    </details>
   </section>
 
-  <!-- ─── LIVE BOOK TAB ───────────────────────────────────── -->
-  <section class="panel" id="panel-book">
-    <div class="panel-header">
-      <h2>Live Positions &amp; Orders</h2>
-      <div class="pnl-display">Floating P/L: <strong id="totalProfit">0.00</strong></div>
+  <!-- ─── TRADING TAB ─────────────────────────────────────── -->
+  <section class="panel" id="panel-trading">
+    <div class="ui-section">
+      <div class="section-heading">
+        <span class="section-dot"></span>
+        <h2>Place Orders</h2>
+      </div>
+      <div class="ui-card">
+        <div class="order-builder">
+          <div class="order-toolbar">
+            <button id="addOrderRowBtn" class="btn-sm btn-accent">+ Add Order Row</button>
+            <button id="submitAllOrdersBtn" class="btn-sm btn-green">Submit All Orders</button>
+            <button id="clearOrderRowsBtn" class="btn-sm btn-muted">Clear All</button>
+          </div>
+          <div id="orderRows" class="order-rows"></div>
+        </div>
+        <div class="sub" id="tradingStatus"></div>
+      </div>
     </div>
 
-    <div class="book-toolbar">
-      <button id="closeSelectedBtn" class="btn-sm btn-red" disabled>Close Selected</button>
-      <button id="closeAllBtn" class="btn-sm btn-red">Close All Positions</button>
-      <span id="closeStatus" class="status-text"></span>
-    </div>
+    <div class="ui-section">
+      <div class="section-heading">
+        <span class="section-dot"></span>
+        <h2>Live Positions &amp; Orders</h2>
+        <div class="pnl-display">Floating P/L: <strong id="totalProfit">0.00</strong></div>
+      </div>
+      <div class="ui-card">
+        <div class="book-toolbar" style="margin-top:0">
+          <button id="closeSelectedBtn" class="btn-sm btn-red" disabled>Close Selected</button>
+          <button id="closeAllBtn" class="btn-sm btn-red">Close All Positions</button>
+          <span id="closeStatus" class="status-text"></span>
+        </div>
 
-    <h3>Open Positions</h3>
-    <table id="positionsTable" class="tbl">
-      <thead><tr><th><input type="checkbox" id="selectAllPos"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Open</th><th>P/L</th><th>SL</th><th>TP</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
+        <h3>Open Positions</h3>
+        <table id="positionsTable" class="tbl">
+          <thead><tr><th><input type="checkbox" id="selectAllPos"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Open</th><th>P/L</th><th>SL</th><th>TP</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
 
-    <h3>Pending Orders</h3>
-    <p class="sub">Pending orders are not filled yet. They wait for trigger/limit/stop price conditions.</p>
-    <div class="book-toolbar">
-      <button id="cancelSelectedPendingBtn" class="btn-sm btn-red" disabled>Cancel Selected Pending</button>
-      <button id="cancelAllPendingBtn" class="btn-sm btn-red">Cancel All Pending</button>
-      <span id="pendingStatus" class="status-text"></span>
+      <div class="ui-card section-gap">
+        <h3>Pending Orders</h3>
+        <p class="sub">Pending orders are not filled yet. They wait for trigger/limit/stop price conditions.</p>
+        <div class="book-toolbar">
+          <button id="cancelSelectedPendingBtn" class="btn-sm btn-red" disabled>Cancel Selected Pending</button>
+          <button id="cancelAllPendingBtn" class="btn-sm btn-red">Cancel All Pending</button>
+          <span id="pendingStatus" class="status-text"></span>
+        </div>
+        <table id="ordersTable" class="tbl">
+          <thead><tr><th><input type="checkbox" id="selectAllPending"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>SL</th><th>TP</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <table id="ordersTable" class="tbl">
-      <thead><tr><th><input type="checkbox" id="selectAllPending"></th><th>Account</th><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>SL</th><th>TP</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-
-    <h3 style="margin-top:12px">Today's Executions / Activity</h3>
-    <div class="book-toolbar">
-      <button id="refreshHistoryMiniBtn" class="btn-sm btn-accent">Refresh Closed P/L</button>
-      <span id="historyMiniStatus" class="status-text"></span>
-    </div>
-    <table id="historyMiniTable" class="tbl">
-      <thead>
-        <tr>
-          <th>Exec Time (UTC)</th><th>Account</th><th>Symbol</th><th>Side</th><th>Vol</th><th>Price</th><th>Profit</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
   </section>
 
   <!-- ─── HISTORY TAB ─────────────────────────────────────── -->
@@ -184,32 +225,6 @@
     </table>
   </section>
 
-  <!-- ─── LICENSE TAB ─────────────────────────────────────── -->
-  <section class="panel" id="panel-license">
-    <div class="panel-header">
-      <h2>License</h2>
-      <p class="sub">Trading is blocked until a vendor-signed license is activated. Onboarding and account setup remain available.</p>
-    </div>
-    <div class="lic-form">
-      <input id="licenseReqPath" placeholder="license_request.json" class="lic-input" value="license_request.json">
-      <button id="generateLicenseReqBtn" class="btn-sm btn-muted">Generate Request</button>
-    </div>
-    <div class="sub">Share generated request file with vendor to receive signed license file.</div>
-    <div class="lic-form">
-      <input id="licensePath" placeholder="C:\path\to\license.json" class="lic-input">
-      <input id="licenseFile" type="file" accept=".json,application/json">
-      <button id="activateLicenseBtn" class="btn-sm btn-accent">Activate</button>
-      <button id="refreshLicenseBtn" class="btn-sm btn-muted">Refresh</button>
-    </div>
-    <div class="result-box" id="licenseResult"></div>
-
-    <div class="panel-header" style="margin-top:14px">
-      <h2>Logs</h2>
-      <p class="sub">Runtime logs are stored at <code>logs/ui_backend.log</code> and rotate daily (2-day retention).</p>
-    </div>
-    <div class="sub" id="logsStatus">No action required for normal users.</div>
-  </section>
-
-  <script src="/ui/app.js?v=20260311-2"></script>
+  <script src="/ui/app.js?v=20260311-7"></script>
 </body>
 </html>

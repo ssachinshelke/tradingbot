@@ -948,11 +948,7 @@ class TradingUIService:
                 if walked > max_dirs or len(hits) >= max_hits:
                     break
 
-        default_source = ""
-        if hits:
-            default_source = str(Path(hits[0]).parent)
-        else:
-            default_source = r"C:\Program Files\MetaTrader 5"
+        default_source = str(Path(hits[0]).parent) if hits else ""
 
         portable_root = Path("mt5-portable")
         existing_portable: list[str] = []

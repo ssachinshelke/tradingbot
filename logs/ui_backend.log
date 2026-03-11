@@ -1,0 +1,149 @@
+2026-03-11 17:36:02,474 INFO:     Started server process [43628]
+2026-03-11 17:36:02,475 INFO:     Waiting for application startup.
+2026-03-11 17:36:02,476 INFO:     Application startup complete.
+2026-03-11 17:36:02,477 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 17:36:03,626 INFO:     127.0.0.1:59348 - "GET / HTTP/1.1" 200 OK
+2026-03-11 17:36:03,663 INFO:     127.0.0.1:59348 - "GET /ui/styles.css?v=20260311-2 HTTP/1.1" 200 OK
+2026-03-11 17:36:03,665 INFO:     127.0.0.1:64002 - "GET /ui/app.js?v=20260311-2 HTTP/1.1" 200 OK
+2026-03-11 17:36:03,733 INFO:     127.0.0.1:64002 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 17:36:03,764 INFO:     127.0.0.1:64002 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+2026-03-11 17:36:05,441 INFO:     127.0.0.1:64002 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 17:36:05,453 INFO:     127.0.0.1:60276 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 17:36:05,454 INFO:     connection open
+2026-03-11 17:36:05,459 INFO:     127.0.0.1:64002 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 17:36:05,460 INFO:     127.0.0.1:59348 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 17:36:05,464 INFO:     127.0.0.1:51381 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 17:52:59,499 INFO:     Shutting down
+2026-03-11 17:52:59,501 INFO:     connection closed
+2026-03-11 17:52:59,605 INFO:     Waiting for application shutdown.
+2026-03-11 17:52:59,606 INFO:     Application shutdown complete.
+2026-03-11 17:52:59,606 INFO:     Finished server process [43628]
+2026-03-11 17:53:05,056 INFO:     Started server process [33220]
+2026-03-11 17:53:05,057 INFO:     Waiting for application startup.
+2026-03-11 17:53:05,059 INFO:     Application startup complete.
+2026-03-11 17:53:05,060 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 17:53:05,431 INFO:     127.0.0.1:61763 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 17:53:05,434 INFO:     connection open
+2026-03-11 17:53:06,262 INFO:     127.0.0.1:65075 - "GET / HTTP/1.1" 200 OK
+2026-03-11 17:53:06,355 INFO:     127.0.0.1:65075 - "GET /ui/styles.css?v=20260311-3 HTTP/1.1" 200 OK
+2026-03-11 17:53:06,366 INFO:     127.0.0.1:53811 - "GET /ui/app.js?v=20260311-3 HTTP/1.1" 200 OK
+2026-03-11 17:53:06,469 INFO:     127.0.0.1:53811 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 17:53:07,337 INFO:     127.0.0.1:53811 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 17:53:07,350 INFO:     127.0.0.1:58577 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 17:53:07,355 INFO:     connection open
+2026-03-11 17:53:07,358 INFO:     127.0.0.1:53811 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 17:53:07,359 INFO:     127.0.0.1:65075 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 17:53:07,366 INFO:     127.0.0.1:63514 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 17:53:08,375 INFO:     connection closed
+2026-03-11 17:56:19,907 INFO:     connection closed
+2026-03-11 17:56:45,727 INFO:     No UI clients for 25s, shutting down app process
+2026-03-11 18:20:43,749 INFO:     Started server process [35616]
+2026-03-11 18:20:43,750 INFO:     Waiting for application startup.
+2026-03-11 18:20:43,751 INFO:     Application startup complete.
+2026-03-11 18:20:43,751 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 18:20:44,996 INFO:     127.0.0.1:64049 - "GET / HTTP/1.1" 200 OK
+2026-03-11 18:20:45,030 INFO:     127.0.0.1:64049 - "GET /ui/styles.css?v=20260311-4 HTTP/1.1" 200 OK
+2026-03-11 18:20:45,036 INFO:     127.0.0.1:52837 - "GET /ui/app.js?v=20260311-4 HTTP/1.1" 200 OK
+2026-03-11 18:20:45,129 INFO:     127.0.0.1:52837 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 18:20:45,985 INFO:     127.0.0.1:52837 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:20:45,999 INFO:     127.0.0.1:54412 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 18:20:46,003 INFO:     connection open
+2026-03-11 18:20:46,011 INFO:     127.0.0.1:64049 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 18:20:46,012 INFO:     127.0.0.1:52837 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 18:20:46,019 INFO:     127.0.0.1:55278 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 18:21:04,951 INFO:     127.0.0.1:57113 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:21:05,834 INFO:     127.0.0.1:57113 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:22:29,151 INFO:     127.0.0.1:56119 - "POST /api/healthcheck HTTP/1.1" 200 OK
+2026-03-11 18:22:32,385 INFO:     127.0.0.1:56119 - "POST /api/healthcheck HTTP/1.1" 200 OK
+2026-03-11 18:22:32,919 INFO:     127.0.0.1:56119 - "POST /api/healthcheck HTTP/1.1" 200 OK
+2026-03-11 18:25:17,696 INFO:     connection closed
+2026-03-11 18:25:43,066 INFO:     No UI clients for 25s, shutting down app process
+2026-03-11 18:31:49,887 INFO:     Started server process [1028]
+2026-03-11 18:31:49,888 INFO:     Waiting for application startup.
+2026-03-11 18:31:49,890 INFO:     Application startup complete.
+2026-03-11 18:31:49,892 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 18:31:51,163 INFO:     127.0.0.1:54810 - "GET / HTTP/1.1" 200 OK
+2026-03-11 18:31:51,212 INFO:     127.0.0.1:54810 - "GET /ui/styles.css?v=20260311-5 HTTP/1.1" 200 OK
+2026-03-11 18:31:51,217 INFO:     127.0.0.1:55166 - "GET /ui/app.js?v=20260311-5 HTTP/1.1" 200 OK
+2026-03-11 18:31:51,304 INFO:     127.0.0.1:55166 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 18:31:52,423 INFO:     127.0.0.1:55166 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:31:52,443 INFO:     127.0.0.1:61869 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 18:31:52,448 INFO:     connection open
+2026-03-11 18:31:52,465 INFO:     127.0.0.1:55166 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 18:31:52,466 INFO:     127.0.0.1:54810 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 18:31:52,493 INFO:     127.0.0.1:62225 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 18:33:05,717 INFO:     Shutting down
+2026-03-11 18:33:05,719 INFO:     connection closed
+2026-03-11 18:33:05,824 INFO:     Waiting for application shutdown.
+2026-03-11 18:33:05,825 INFO:     Application shutdown complete.
+2026-03-11 18:33:05,826 INFO:     Finished server process [1028]
+2026-03-11 18:48:17,360 INFO:     Started server process [27636]
+2026-03-11 18:48:17,361 INFO:     Waiting for application startup.
+2026-03-11 18:48:17,362 INFO:     Application startup complete.
+2026-03-11 18:48:17,363 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 18:48:18,583 INFO:     127.0.0.1:62322 - "GET / HTTP/1.1" 200 OK
+2026-03-11 18:48:18,629 INFO:     127.0.0.1:62322 - "GET /ui/styles.css?v=20260311-5 HTTP/1.1" 304 Not Modified
+2026-03-11 18:48:18,630 INFO:     127.0.0.1:60597 - "GET /ui/app.js?v=20260311-5 HTTP/1.1" 304 Not Modified
+2026-03-11 18:48:18,690 INFO:     127.0.0.1:60597 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 18:48:19,697 INFO:     127.0.0.1:60597 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:48:19,706 INFO:     127.0.0.1:53035 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 18:48:19,707 INFO:     connection open
+2026-03-11 18:48:19,717 INFO:     127.0.0.1:62322 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 18:48:19,718 INFO:     127.0.0.1:60597 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 18:48:19,723 INFO:     127.0.0.1:56678 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 18:49:08,452 INFO:     connection closed
+2026-03-11 18:49:08,960 INFO:     No UI clients for 0s, shutting down app process
+2026-03-11 18:52:32,527 INFO:     Started server process [22132]
+2026-03-11 18:52:32,527 INFO:     Waiting for application startup.
+2026-03-11 18:52:32,529 INFO:     Application startup complete.
+2026-03-11 18:52:32,530 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 18:52:33,752 INFO:     127.0.0.1:54634 - "GET / HTTP/1.1" 200 OK
+2026-03-11 18:52:33,814 INFO:     127.0.0.1:54634 - "GET /ui/styles.css?v=20260311-6 HTTP/1.1" 200 OK
+2026-03-11 18:52:33,819 INFO:     127.0.0.1:58002 - "GET /ui/app.js?v=20260311-6 HTTP/1.1" 200 OK
+2026-03-11 18:52:33,875 INFO:     127.0.0.1:58002 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 18:52:34,865 INFO:     127.0.0.1:58002 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 18:52:34,878 INFO:     127.0.0.1:55105 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 18:52:34,880 INFO:     connection open
+2026-03-11 18:52:34,887 INFO:     127.0.0.1:58002 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 18:52:34,888 INFO:     127.0.0.1:54634 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 18:52:34,893 INFO:     127.0.0.1:53351 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 18:53:58,249 INFO:     connection closed
+2026-03-11 18:53:58,523 INFO:     No UI clients for 0s, shutting down app process
+2026-03-11 19:02:41,195 INFO:     Started server process [39464]
+2026-03-11 19:02:41,195 INFO:     Waiting for application startup.
+2026-03-11 19:02:41,196 INFO:     Application startup complete.
+2026-03-11 19:02:41,197 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 19:02:42,406 INFO:     127.0.0.1:64756 - "GET / HTTP/1.1" 200 OK
+2026-03-11 19:02:42,430 INFO:     127.0.0.1:64756 - "GET /ui/styles.css?v=20260311-7 HTTP/1.1" 200 OK
+2026-03-11 19:02:42,434 INFO:     127.0.0.1:59797 - "GET /ui/app.js?v=20260311-7 HTTP/1.1" 200 OK
+2026-03-11 19:02:42,486 INFO:     127.0.0.1:59797 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 19:02:43,106 INFO:     127.0.0.1:59797 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:02:43,120 INFO:     127.0.0.1:51847 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 19:02:43,127 INFO:     connection open
+2026-03-11 19:02:43,130 INFO:     127.0.0.1:59797 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 19:02:43,131 INFO:     127.0.0.1:64756 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 19:02:43,136 INFO:     127.0.0.1:57041 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 19:02:57,921 INFO:     127.0.0.1:63318 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:02:58,740 INFO:     127.0.0.1:63318 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:05:53,091 INFO:     connection closed
+2026-03-11 19:05:53,332 INFO:     No UI clients for 0s, shutting down app process
+2026-03-11 19:08:56,015 INFO:     Started server process [43216]
+2026-03-11 19:08:56,016 INFO:     Waiting for application startup.
+2026-03-11 19:08:56,017 INFO:     Application startup complete.
+2026-03-11 19:08:56,018 INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+2026-03-11 19:08:57,222 INFO:     127.0.0.1:50596 - "GET / HTTP/1.1" 200 OK
+2026-03-11 19:08:57,257 INFO:     127.0.0.1:50596 - "GET /ui/styles.css?v=20260311-7 HTTP/1.1" 304 Not Modified
+2026-03-11 19:08:57,285 INFO:     127.0.0.1:50596 - "GET /ui/app.js?v=20260311-7 HTTP/1.1" 200 OK
+2026-03-11 19:08:57,364 INFO:     127.0.0.1:50596 - "GET /api/accounts HTTP/1.1" 200 OK
+2026-03-11 19:08:58,093 INFO:     127.0.0.1:50596 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:08:58,102 INFO:     127.0.0.1:62427 - "WebSocket /ws/realtime" [accepted]
+2026-03-11 19:08:58,106 INFO:     connection open
+2026-03-11 19:08:58,115 INFO:     127.0.0.1:63480 - "GET /api/system/logs?limit=20 HTTP/1.1" 200 OK
+2026-03-11 19:08:58,117 INFO:     127.0.0.1:50596 - "GET /api/license/status HTTP/1.1" 200 OK
+2026-03-11 19:08:58,122 INFO:     127.0.0.1:59883 - "GET /api/system/preflight HTTP/1.1" 200 OK
+2026-03-11 19:09:00,923 INFO:     127.0.0.1:59883 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:09:01,544 INFO:     127.0.0.1:59883 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:09:07,402 INFO:     127.0.0.1:60965 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:09:08,065 INFO:     127.0.0.1:60965 - "GET /api/system/mt5-discover HTTP/1.1" 200 OK
+2026-03-11 19:09:18,596 INFO:     connection closed
+2026-03-11 19:09:19,277 INFO:     No UI clients for 0s, shutting down app process

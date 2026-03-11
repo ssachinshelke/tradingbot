@@ -93,6 +93,12 @@ const state = {
   closingSet: new Set(),
 };
 const DEFAULT_PORTABLE_NAMES = ['acc1', 'acc2'];
+const LAST_PATH_KEYS = {
+  accountImport: 'tm5_last_account_import_path',
+  licenseActivate: 'tm5_last_license_path',
+  licenseRequest: 'tm5_last_license_request_path',
+  mt5SourceDir: 'tm5_last_mt5_source_dir',
+};
 
 // ── Helpers ────────────────────────────────────────────────
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
@@ -102,6 +108,20 @@ function setResult(id, v) { const el = document.getElementById(id); if (el) el.t
 
 function toB64(text) {
   return btoa(unescape(encodeURIComponent(text)));
+}
+
+function readLocal(key, fallback = '') {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLocal(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
 }
 
 function profitClass(val) {
@@ -127,20 +147,12 @@ function renderPreflightResult(res) {
     badge.textContent = `Status: ${String(res.status || 'unknown').toUpperCase()} | Ready: ${res.ready_to_trade ? 'YES' : 'NO'}`;
     badge.style.color = res.ready_to_trade ? 'var(--green)' : 'var(--red)';
   }
-  const summary = res.summary || {};
   const firstIssue = checks.find(c => !c.ok);
   const statusEl = $('#preflightStatus');
   if (statusEl) {
-    const lic = res.license || {};
-    const trialDays = lic.trial_days_left;
-    const marketTime = res.trusted_market_time_utc || 'unavailable';
-    const protection = Array.isArray(res.license_protection_notes) ? res.license_protection_notes.join(' ') : '';
-    statusEl.textContent =
-      `Checks: pass=${Number(summary.pass || 0)}, fail=${Number(summary.fail || 0)}, warn=${Number(summary.warn || 0)}`
-      + (firstIssue ? ` | ${firstIssue.message}` : '')
-      + ` | 1) Trial days pending: ${trialDays ?? 'n/a'}`
-      + ` | 2) Trusted market date/time (UTC): ${marketTime}`
-      + ` | 3) License hardening: ${protection}`;
+    statusEl.textContent = firstIssue
+      ? `Error: ${firstIssue.message}`
+      : 'All checks passed. Ready for trading.';
   }
 }
 
@@ -214,6 +226,8 @@ $('#accountsTable').addEventListener('click', async e => {
   if (!btn) {
     const row = e.target.closest('tr.account-row');
     if (!row) return;
+    const panel = $('#manageAccountsPanel');
+    if (panel) panel.open = true;
     const form = $('#accountForm');
     if (!form) return;
     form.querySelector('[name="name"]').value = row.dataset.name || '';
@@ -274,7 +288,7 @@ $('#accountImportForm').addEventListener('submit', async e => {
   e.preventDefault();
   const f = new FormData(e.target);
   const filePath = String(f.get('file_path') || '').trim() || 'account.json';
-  const uploadInput = $('#accountImportFile');
+  const uploadInput = $('#accountImportFileHidden');
   const submitBtn = e.target.querySelector('button[type="submit"]');
   const done = showSpinner(submitBtn);
   try {
@@ -291,6 +305,7 @@ $('#accountImportForm').addEventListener('submit', async e => {
       `Imported ${out.imported_count || 0} account(s)`
       + ((out.skipped_count || 0) > 0 ? `, skipped ${out.skipped_count} template/incomplete row(s)` : '')
     );
+    writeLocal(LAST_PATH_KEYS.accountImport, filePath);
     await loadAccounts();
   } catch (err) {
     setText('accountImportStatus', err.detail || err.error || err.message || String(err));
@@ -325,11 +340,17 @@ $('#portableForm').addEventListener('submit', async e => {
   done();
 });
 
-$('#accountImportFile')?.addEventListener('change', e => {
+$('#accountImportBrowseBtn')?.addEventListener('click', () => {
+  $('#accountImportFileHidden')?.click();
+});
+
+$('#accountImportFileHidden')?.addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (!f) return;
-  const pathInput = $('#accountImportForm [name="file_path"]');
-  if (pathInput) pathInput.value = f.name || 'account.json';
+  const pathInput = $('#accountImportPath');
+  const shownPath = e.target.value || f.name || 'account.json';
+  if (pathInput) pathInput.value = shownPath;
+  writeLocal(LAST_PATH_KEYS.accountImport, shownPath);
 });
 
 async function initPortableDefaults() {
@@ -339,12 +360,14 @@ async function initPortableDefaults() {
   const hint = $('#portableHint');
   if (!sourceInput) return;
   if (!sourceInput.value) {
-    sourceInput.value = 'C:\\Program Files\\MetaTrader 5';
+    sourceInput.value = readLocal(LAST_PATH_KEYS.mt5SourceDir, 'C:\\Program Files\\MetaTrader 5');
   }
   try {
     const res = await API.discoverMT5();
-    if (res.default_source_dir) {
+    const hasDetectedInstall = Number(res.count || 0) > 0 && !res.install_required && !!res.default_source_dir;
+    if (hasDetectedInstall) {
       sourceInput.value = res.default_source_dir;
+      writeLocal(LAST_PATH_KEYS.mt5SourceDir, res.default_source_dir);
       if (accPathInput && !accPathInput.value.trim()) {
         const sep = res.default_source_dir.endsWith('\\') ? '' : '\\';
         accPathInput.value = `${res.default_source_dir}${sep}terminal64.exe`;
@@ -357,7 +380,7 @@ async function initPortableDefaults() {
       const hasPortable = Number(res.portable_count || 0) >= DEFAULT_PORTABLE_NAMES.length;
       if (hasPortable) {
         hint.textContent = `Existing portable folders detected (${(res.portable_items || []).join(', ')}). Click create again to refresh/rebuild if needed.`;
-      } else if (res.install_required) {
+      } else if (!hasDetectedInstall) {
         hint.textContent = 'MT5 not detected. Please install MetaTrader 5, then retry auto-create.';
       } else {
         hint.textContent = `Detected ${res.count} terminal path(s). Auto-filled source path.`;
@@ -369,6 +392,50 @@ async function initPortableDefaults() {
     }
   }
 }
+
+$('#portableBrowseBtn')?.addEventListener('click', () => {
+  $('#portableFileHidden')?.click();
+});
+
+$('#portableFileHidden')?.addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+  const sourceInput = $('#portableForm [name="source_dir"]');
+  const raw = String(e.target.value || '');
+  const normalized = raw.replace(/\//g, '\\');
+  if (/\\fakepath\\/i.test(normalized)) {
+    setText('portableStatus', 'Browser privacy hides full path. Use Detect MT5 for auto-path or paste full source folder path.');
+    return;
+  }
+  const idx = normalized.toLowerCase().lastIndexOf('\\terminal64.exe');
+  const dir = idx > 0 ? normalized.slice(0, idx) : normalized.substring(0, normalized.lastIndexOf('\\'));
+  if (sourceInput && dir) {
+    sourceInput.value = dir;
+    writeLocal(LAST_PATH_KEYS.mt5SourceDir, dir);
+    setText('portableStatus', `Selected MT5 source folder: ${dir}`);
+  }
+});
+
+$('#detectMt5Btn')?.addEventListener('click', async function () {
+  const done = showSpinner(this);
+  setText('portableStatus', 'Detecting MT5 installation paths...');
+  try {
+    const res = await API.discoverMT5();
+    const sourceInput = $('#portableForm [name="source_dir"]');
+    const hasDetectedInstall = Number(res.count || 0) > 0 && !res.install_required && !!res.default_source_dir;
+    if (hasDetectedInstall && sourceInput) {
+      sourceInput.value = res.default_source_dir;
+      writeLocal(LAST_PATH_KEYS.mt5SourceDir, res.default_source_dir);
+      setText('portableStatus', `Detected MT5 source folder: ${res.default_source_dir}`);
+    } else {
+      setText('portableStatus', 'MT5 path not detected automatically. Please paste source folder path manually.');
+    }
+    await initPortableDefaults();
+  } catch (err) {
+    setText('portableStatus', err.detail || err.error || err.message || String(err));
+  }
+  done();
+});
 
 $('#healthcheckAllBtn').addEventListener('click', async function () {
   const done = showSpinner(this);
@@ -876,55 +943,8 @@ async function refreshHistory() {
       tbody.appendChild(tr);
     }
     $('#historyStatus').textContent = `Loaded ${(res.items || []).length} rows (${mode})`;
-    renderHistoryMini((res.items || []).slice(0, 100));
   } catch (err) {
     $('#historyStatus').textContent = `Error: ${err.detail || err.message || String(err)}`;
-    const mini = $('#historyMiniStatus');
-    if (mini) mini.textContent = `Error: ${err.detail || err.message || String(err)}`;
-  }
-}
-
-function renderHistoryMini(items) {
-  const tbody = $('#historyMiniTable tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-  let total = 0;
-  for (const item of items) {
-    const profit = Number(item.profit || 0);
-    total += profit;
-    const isOrderRecord = String(item.record_kind || '') === 'order';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${item.executed_at_utc || ''}</td>
-      <td>${esc(item.account)}</td>
-      <td>${esc(item.symbol)}</td>
-      <td>${isOrderRecord ? `${item.side} (order)` : item.side}</td>
-      <td>${item.volume}</td>
-      <td>${item.price}</td>
-      <td class="${profitClass(profit)}">${profit.toFixed(2)}</td>
-    `;
-    tbody.appendChild(tr);
-  }
-  const status = $('#historyMiniStatus');
-  if (status) {
-    status.textContent = `Rows: ${items.length}, Total P/L: ${total.toFixed(2)}`;
-  }
-}
-
-async function refreshHistoryMiniOnly() {
-  const status = $('#historyMiniStatus');
-  if (!state.accounts.length) {
-    if (status) status.textContent = 'No active accounts imported yet.';
-    const tbody = $('#historyMiniTable tbody');
-    if (tbody) tbody.innerHTML = '';
-    return;
-  }
-  if (status) status.textContent = 'Loading...';
-  try {
-    const res = await API.closedHistory('', 1, 2000, 'all');
-    renderHistoryMini((res.items || []).slice(0, 100));
-  } catch (err) {
-    if (status) status.textContent = `Error: ${err.detail || err.message || String(err)}`;
   }
 }
 
@@ -990,7 +1010,7 @@ async function refreshLicense(showResult = true) {
 
 $('#activateLicenseBtn').addEventListener('click', async function () {
   const p = $('#licensePath').value.trim();
-  const fileInput = $('#licenseFile');
+  const fileInput = $('#licenseFileHidden');
   const chosenFile = fileInput?.files?.[0];
   if (!p && !chosenFile) { setResult('licenseResult', 'Provide license file path or choose a license JSON file.'); return; }
   const done = showSpinner(this);
@@ -1002,6 +1022,7 @@ $('#activateLicenseBtn').addEventListener('click', async function () {
     } else {
       res = await API.activateLicense(p);
     }
+    writeLocal(LAST_PATH_KEYS.licenseActivate, p || fileInput?.value || chosenFile?.name || 'license.json');
     if (res.ok) {
       const exp = res.expires_at ? new Date(res.expires_at).toISOString() : 'n/a';
       const trial = res.trial_days_left === null || res.trial_days_left === undefined ? 'n/a' : res.trial_days_left;
@@ -1019,6 +1040,7 @@ $('#generateLicenseReqBtn').addEventListener('click', async function () {
   const done = showSpinner(this);
   try {
     const res = await API.createLicenseRequest(p);
+    writeLocal(LAST_PATH_KEYS.licenseRequest, p);
     setResult(
       'licenseResult',
       `License request generated successfully\nFile: ${res.file_path}\nMachine hash: ${res.machine_hash}\nRequested at (UTC): ${res.requested_at_utc}\n\nShare this file with vendor to receive signed license.`
@@ -1030,18 +1052,22 @@ $('#generateLicenseReqBtn').addEventListener('click', async function () {
   await refreshLicense(false);
 });
 
-$('#licenseFile')?.addEventListener('change', e => {
+$('#licenseBrowseBtn')?.addEventListener('click', () => {
+  $('#licenseFileHidden')?.click();
+});
+
+$('#licenseFileHidden')?.addEventListener('change', e => {
   const f = e.target.files?.[0];
   if (!f) return;
   const p = $('#licensePath');
-  if (p) p.value = f.name || 'license.json';
+  const shownPath = e.target.value || f.name || 'license.json';
+  if (p) p.value = shownPath;
+  writeLocal(LAST_PATH_KEYS.licenseActivate, shownPath);
 });
 
 $('#refreshLicenseBtn').addEventListener('click', refreshLicense);
 $('#refreshHistoryBtn').addEventListener('click', refreshHistory);
 $('#refreshLogsBtn')?.addEventListener('click', refreshLogs);
-const historyMiniBtn = $('#refreshHistoryMiniBtn');
-if (historyMiniBtn) historyMiniBtn.addEventListener('click', refreshHistoryMiniOnly);
 $('#shutdownBtn')?.addEventListener('click', async () => {
   try {
     await API.shutdown();
@@ -1051,6 +1077,18 @@ $('#shutdownBtn')?.addEventListener('click', async () => {
 
 // ── Boot ───────────────────────────────────────────────────
 (async function boot() {
+  const importPath = $('#accountImportPath');
+  if (importPath) {
+    importPath.value = readLocal(LAST_PATH_KEYS.accountImport, importPath.value || 'account.json');
+  }
+  const licensePath = $('#licensePath');
+  if (licensePath) {
+    licensePath.value = readLocal(LAST_PATH_KEYS.licenseActivate, licensePath.value || '');
+  }
+  const licenseReqPath = $('#licenseReqPath');
+  if (licenseReqPath) {
+    licenseReqPath.value = readLocal(LAST_PATH_KEYS.licenseRequest, licenseReqPath.value || 'license_request.json');
+  }
   await loadAccounts();
   await initPortableDefaults();
   refreshLicense();
@@ -1062,7 +1100,5 @@ $('#shutdownBtn')?.addEventListener('click', async () => {
     renderPreflightResult(pre);
   } catch {}
   refreshHistory();
-  refreshHistoryMiniOnly();
   setInterval(refreshHistory, 15000);
-  setInterval(refreshHistoryMiniOnly, 15000);
 })();

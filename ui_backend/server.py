@@ -126,7 +126,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     """Startup: launch realtime broadcast loop. Shutdown: cancel it and drain the thread pool."""
 
     async def realtime_loop() -> None:
-        idle_shutdown_sec = max(5, int(os.getenv("UI_NO_CLIENT_SHUTDOWN_SECONDS", "25") or "25"))
+        # Default is immediate shutdown when last UI client disconnects.
+        # Can be overridden via UI_NO_CLIENT_SHUTDOWN_SECONDS.
+        idle_shutdown_sec = max(0, int(os.getenv("UI_NO_CLIENT_SHUTDOWN_SECONDS", "0") or "0"))
         while True:
             try:
                 snapshot = await _run_blocking(service.get_active_book)
